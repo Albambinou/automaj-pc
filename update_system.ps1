@@ -170,7 +170,7 @@ function Run-LocalActivationScript {
     Write-Host " -> R${e_aigu}cup${e_aigu}ration du script d'activation depuis GitHub..." -ForegroundColor Cyan
     
     # /!\ METS TON PROPRE LIEN RAW ICI APRÈS L'ÉTAPE 3 /!\
-    $urlActivation = "https://raw.githubusercontent.com/VOTRE_PSEUDO/VOTRE_DEPOT/main/Activer_Office.cmd"
+    $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/Activer_Office.cmd"
     $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
     
     try {
