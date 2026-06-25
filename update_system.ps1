@@ -16,10 +16,14 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # On force la nouvelle fenêtre à réexécuter la commande de téléchargement direct depuis ton GitHub
-    $githubCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex"
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"$githubCommand`""
+    # On utilise des arguments séparés par des virgules pour éviter les conflits de guillemets
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex"
+    )
     try {
+        # Lance le nouveau processus PowerShell en tant qu'admin avec la structure propre
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
     } catch {
         Clear-Host
