@@ -12,11 +12,13 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR & TAILLE DE FENÊTRE
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (COMPATIBLE GITHUB IRM / IEX)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    # On force la nouvelle fenêtre à réexécuter la commande de téléchargement direct depuis ton GitHub
+    $githubCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex"
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"$githubCommand`""
     try {
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
     } catch {
