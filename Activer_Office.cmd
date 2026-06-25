@@ -7,7 +7,7 @@ echo.
 
 :: 1. Définition du lien RAW vers ton fichier MAS_AIO.cmd sur GitHub
 :: (Pense à remplacer VOTRE_PSEUDO et VOTRE_DEPOT par tes vraies infos)
-set "URL_MAS=https://raw.githubusercontent.com/VOTRE_PSEUDO/VOTRE_DEPOT/main/MAS_AIO.cmd"
+set "URL_MAS=https://raw.githubusercontent.com/Albambinou/automaj-pc/blob/main/MAS_AIO.cmd"
 set "TEMP_MAS=%TEMP%\MAS_AIO.cmd"
 
 echo  -^> Recuperation des outils d'activation...
