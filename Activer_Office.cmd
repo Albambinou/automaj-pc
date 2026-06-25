@@ -1,27 +1,30 @@
 @echo off
-:: Vérification des privilèges administrateur
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo Veuillez executer ce script en tant qu'Administrateur.
-    pause
-    exit /b
-)
-
-echo Activation de Microsoft Office en cours...
-echo Utilisation du fichier MAS_AIO.cmd local...
-
-:: Vérification de la présence du fichier MAS dans le même dossier
-if not exist "%~dp0MAS_AIO.cmd" (
-    echo.
-    echo [ERREUR] Le fichier MAS_AIO.cmd est introuvable dans ce dossier.
-    echo Assurez-vous que 'MAS_AIO.cmd' et ce script soient dans le meme repertoire.
-    pause
-    exit /b
-)
-
-:: Exécution locale avec l'argument Ohook pour Office
-call "%~dp0MAS_AIO.cmd" /ohook
-
+cls
+echo ============================================================
+echo   PREPARATION DE L'ACTIVATION VIA GITHUB
+echo ============================================================
 echo.
-echo Processus termine ! Verifiez le statut dans votre application Office (Fichier - Compte).
-pause
+
+:: 1. Définition du lien RAW vers ton fichier MAS_AIO.cmd sur GitHub
+:: (Pense à remplacer VOTRE_PSEUDO et VOTRE_DEPOT par tes vraies infos)
+set "URL_MAS=https://raw.githubusercontent.com/VOTRE_PSEUDO/VOTRE_DEPOT/main/MAS_AIO.cmd"
+set "TEMP_MAS=%TEMP%\MAS_AIO.cmd"
+
+echo  -^> Recuperation des outils d'activation...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%URL_MAS%' -OutFile '%TEMP_MAS%'"
+
+if not exist "%TEMP_MAS%" (
+    echo [ERREUR] Impossible de recuperer les outils depuis GitHub.
+    pause
+    exit
+)
+
+echo  -^> Lancement de l'activation...
+echo.
+
+:: 2. On lance le fichier MAS_AIO.cmd qui a été téléchargé dans les fichiers temporaires
+call "%TEMP_MAS%"
+
+:: 3. Nettoyage du fichier temporaire après la fermeture
+if exist "%TEMP_MAS%" del /f /q "%TEMP_MAS%"
+exit
