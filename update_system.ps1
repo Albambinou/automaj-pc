@@ -130,7 +130,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365 (INSTALLATION, ACTIVATION & MAJ)
+# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365 (DÉTECTION D'ACTIVATION SÉCURISÉE)
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
@@ -155,11 +155,14 @@ if ($isOfficeInstalled) {
 
     if ($targetVbs -and (Test-Path $targetVbs)) {
         $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
-        if ($licenceStatus -match "LICENSE STATUS:\s+---LICENSED---" -or $licenceStatus -match "LICENSED") {
+        
+        # CORRECTIF DÉTECTION : On regarde si la licence est active OU si un jeton d'abonnement 365 valide est présent
+        if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
             $isOfficeActivated = $true
         }
     } else {
-        $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\16.0\Common\Licensing" -ErrorAction SilentlyContinue
+        # Si ospp.vbs est introuvable, on vérifie la présence de clés de registre d'activation Office 365 standards
+        $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name "ProductReleaseIds" -ErrorAction SilentlyContinue
         if ($regCheck) { $isOfficeActivated = $true }
     }
 }
