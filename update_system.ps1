@@ -17,7 +17,6 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE (CORRIGÉE)
 # -------------------------------------------------------------------------
-# Correction ici : Utilisation de [Security.Principal.WindowsBuiltInRole] au lieu du type doublé
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     # CORRECTIF CACHE : On génère une clé unique à l'intérieur même du script qui va forcer la fenêtre admin à charger la nouveauté
@@ -92,7 +91,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (AVEC CURL.EXE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (AVEC LE NOUVEL OUTIL DE FARAG2)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -103,29 +102,39 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    $downloaderExe = "$env:TEMP\nvidia-driver-downloader.exe"
-    $urlDownloader = "https://github.com/Aetf/NVIDIA-Driver-Downloader/releases/download/v2.4.0/nvidia-driver-downloader.exe"
+    $downloaderExe = "$env:TEMP\Nvidia-Driver-Downloader.exe"
+    # URL mise à jour vers le dépôt de farag2
+    $urlDownloader = "https://github.com/farag2/NVidia-Driver-Downloader/releases/download/v3.0.1/Nvidia-Driver-Downloader.exe"
 
     try {
-        # Téléchargement via l'utilitaire natif curl de Windows
+        # Nettoyage d'un résidu éventuel
+        if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
+
+        # Téléchargement via curl
         $curlArgs = @("-L", "-s", "-A", "Mozilla/5.0", $urlDownloader, "-o", $downloaderExe)
         Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
         
+        # Vérification de la validité du fichier (doit peser plus de 1 Mo pour être un vrai exécutable)
         if (Test-Path $downloaderExe) {
-            Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
-            Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+            $fileSize = (Get-Item $downloaderExe).Length
+            if ($fileSize -gt 1048576) {
+                Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
+                Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-            # Exécution silencieuse (Type G = Game Ready) avec l'outil officiel de Beyazit Yilmaz
-            & $downloaderExe --type g --silent --clean | Out-Null
-            
-            # Nettoyage de l'exécutable temporaire
+                # syntaxe farag2 : --type g (Game Ready), --silent, --clean
+                & $downloaderExe --type g --silent --clean | Out-Null
+                
+                Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+            } else {
+                Write-Host " [Attention] Le fichier téléchargé est incomplet. Le lien GitHub a peut-être changé." -ForegroundColor Yellow
+            }
+            # Nettoyage
             Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
-            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
         } else {
-            Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA via curl." -ForegroundColor Yellow
+            Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA de farag2." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host " [Attention] Impossible de lancer le module de mise à jour NVIDIA : $_" -ForegroundColor Yellow
+        Write-Host " [Attention] Impossible d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
