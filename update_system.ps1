@@ -130,18 +130,23 @@ winget source update | Out-Null
 
 Write-Host " -> Analyse des mises $a_grave jour d'applications disponibles..." -ForegroundColor Cyan
 if (Get-Command winget -ErrorAction SilentlyContinue) {
-    $upgradeList = winget upgrade | Where-Object { $_ -match '\s+(winget|msstore)\s*$' }
+    # Récupération propre via l'en-tête standard de winget
+    $upgradeOutput = winget upgrade | Select-String -Pattern '-' -NotMatch
     
     $apps = @()
-    foreach ($line in $upgradeList) {
-        $rawLine = $line.ToString()
-        $columns = $rawLine -split '\s{2,}' | Where-Object { $_.Trim() -ne '' }
-        
-        if ($columns.Count -ge 2) {
-            $name = $columns[0].Trim()
-            $id = $columns[1].Trim()
-            if ($name -and $id -and $name -notmatch "upgrades available" -and $name -notmatch "mises $a_grave jour") {
-                $apps += [PSCustomObject]@{ Name = $name; Id = $id; Selected = $false }
+    foreach ($line in $upgradeOutput) {
+        $stringLine = $line.ToString()
+        # Une ligne valide contient obligatoirement winget ou msstore à la fin
+        if ($stringLine -match '\s+(winget|msstore)\s*$') {
+            # Découpage strict par paquets d'espaces
+            $elements = $stringLine -split '\s{2,}' | Where-Object { $_.Trim() -ne '' }
+            if ($elements.Count -ge 3) {
+                $name = $elements[0].Trim()
+                $id   = $elements[1].Trim()
+                # Sécurité anti-doublon et lignes parasites
+                if ($id -and $name -notmatch "upgrades available" -and $name -notmatch "mises $a_grave jour") {
+                    $apps += [PSCustomObject]@{ Name = $name; Id = $id; Selected = $false }
+                }
             }
         }
     }
@@ -152,7 +157,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
         $choosing = $true
         Write-Host ""
         Write-Host "==========================================================" -ForegroundColor Cyan
-        Write-Host "          S${e_aigu}LECTION DES APPLICATIONS $maj_a_grave METTRE $maj_a_grave JOUR        " -ForegroundColor Cyan
+        Write-Host "         S${e_aigu}LECTION DES APPLICATIONS $maj_a_grave METTRE $maj_a_grave JOUR        " -ForegroundColor Cyan
         Write-Host "==========================================================" -ForegroundColor Cyan
         Write-Host " Entrez le num${e_aigu}ro d'une appli pour la s${e_aigu}lectionner / d${e_aigu}s${e_aigu}lectionner."
         Write-Host " Tapez 0 pour TOUT s${e_aigu}lectionner ou TOUT d${e_aigu}s${e_aigu}lectionner."
@@ -171,7 +176,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
                 Write-Host "  [0] " -NoNewline -ForegroundColor Green
                 Write-Host "TOUT D${e_aigu}S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor Green
             } else {
-                Write-Host "    0  " -NoNewline -ForegroundColor Gray
+                Write-Host "   0  " -NoNewline -ForegroundColor Gray
                 Write-Host "TOUT S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor White
             }
             
@@ -183,7 +188,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
                     Write-Host "  [$num] " -NoNewline -ForegroundColor Green
                     Write-Host $cleanLine -ForegroundColor Green
                 } else {
-                    Write-Host "    $num  " -NoNewline -ForegroundColor Gray
+                    Write-Host "   $num  " -NoNewline -ForegroundColor Gray
                     Write-Host $cleanLine -ForegroundColor White
                 }
             }
@@ -205,8 +210,11 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
             }
         }
 
-        # Filtrage et exécution des applications sélectionnées
-        $selectedApps = $apps | Where-Object { $_.Selected }
+        # Filtrage et exécution basé STRICTEMENT sur l'état booléen vérifié
+        $selectedApps = @()
+        foreach ($app in $apps) {
+            if ($app.Selected -eq $true) { $selectedApps += $app }
+        }
         
         if ($selectedApps.Count -gt 0) {
             Write-Host ""
@@ -226,10 +234,6 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
 } else {
     Write-Host " -> [Attention] L'outil 'winget' est introuvable. ${maj_e_aigu}tape saut${e_aigu}e." -ForegroundColor Yellow
 }
-
-Write-Host ""
-Write-Host "----------------------------------------------------------"
-Write-Host ""
 
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : PILOTE GRAPHIQUE NVIDIA
