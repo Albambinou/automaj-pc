@@ -21,13 +21,12 @@ if (-not $isAdmin) {
         # Cas 1 : Le script est exécuté depuis un fichier .ps1 local
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     } else {
-        # Cas 2 : Le script est lancé directement en mémoire (ex: via irm | iex depuis GitHub)
+        # Cas 2 : Le script est lancé directement en mémoire
         $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
         if ($ScriptContent) {
             $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
             Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
             
-            # On lance le fichier temporaire élevé et on attend sa fermeture pour le supprimer
             Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs -Wait
             Remove-Item -Path $TempFile -Force -ErrorAction SilentlyContinue
         } else {
@@ -51,15 +50,24 @@ Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "    ASSISTANT DE MISE $a_grave JOUR AUTOMATIQUE DE VOTRE PC    " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Ce script va v${e_aigu}rifier et installer toutes vos mises $a_grave jour."
+Write-Host " Ce script va v${e_aigu}rifier et forcer toutes vos mises $a_grave jour."
 Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL
+# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL (FORÇAGE MAXIMAL)
 # -------------------------------------------------------------------------
-Write-Host "[1/3] Recherche globale de TOUTES les mises $a_grave jour Windows Update..." -ForegroundColor Magenta
+Write-Host "[1/3] D${e_aigu}blocage et recherche de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
+
+# 1. Réveil de force des services Windows Update
+Write-Host " -> R${e_aigu}activation des services de mise $a_grave jour..." -ForegroundColor DarkGray
+Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Set-Service -StartupType Manual -ErrorAction SilentlyContinue
+Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+
+# 2. Suppression des blocages potentiels (Stratégies de groupe / Registre)
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name "DisableWindowsUpdateAccess" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -ErrorAction SilentlyContinue
 
 if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
     Write-Host " -> Pr${e_aigu}paration de l'environnement PSWindowsUpdate..." -ForegroundColor DarkGray
@@ -67,13 +75,18 @@ if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
     Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
 }
 
-Import-Module PSWindowsUpdate
+Import-Module PSWindowsUpdate -Force
 
 try {
-    Add-WUServiceManager -ServiceID "7971f2d8-260a-4a17-a31f-f6e3e361242d" -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    Write-Host " -> Analyse en cours (Windows, Pilotes, S${e_aigu}curit${e_aigu}, Logiciels Microsoft)..." -ForegroundColor Cyan
+    # 3. Forçage pur et dur de l'opt-in "Microsoft Update" via l'objet COM natif de Windows
+    $ServiceManager = New-Object -ComObject Microsoft.Update.ServiceManager
+    $ServiceManager.ClientApplicationID = "AutoMajScript"
+    $ServiceManager.AddService2("7971f2d8-260a-4a17-a31f-f6e3e361242d", 7, "") | Out-Null
     
-    $updates = Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -AutoReboot:$false -ErrorAction Stop
+    Write-Host " -> Analyse approfondie en cours (Windows, Pilotes, S${e_aigu}curit${e_aigu}, Logiciels)..." -ForegroundColor Cyan
+    
+    # 4. Installation exhaustive
+    $updates = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop
     
     if ($updates) {
         Write-Host " -> Toutes les mises $a_grave jour ont ${e_aigu}t${e_aigu} t${e_aigu}l${e_aigu}charg${e_aigu}es et install${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
@@ -81,7 +94,7 @@ try {
         Write-Host " -> Votre syst${e_grave}me et vos p${e_aigu}riph${e_aigu}riques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
     }
 } catch {
-    Write-Host " [Information] Windows Update est temporairement occup${e_aigu} ou inaccessible : $_" -ForegroundColor Yellow
+    Write-Host " [Attention] Windows Update refuse de r${e_aigu}pondre. Le service est peut-${e_circo}tre en cours de maintenance en arri${e_grave}re-plan : $_" -ForegroundColor Yellow
 }
 
 Write-Host ""
