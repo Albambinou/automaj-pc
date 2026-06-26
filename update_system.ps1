@@ -101,28 +101,26 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    # Emplacement temporaire du téléchargeur automatique
     $downloaderExe = "$env:TEMP\NVDownloader.exe"
+    # Utilisation du binaire stable de détection et téléchargement direct de pilotes
     $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
 
     try {
-        # 1. Téléchargement de l'utilitaire de détection officielle
+        # Téléchargement de l'utilitaire
         Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -ErrorAction Stop
         
         Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # 2. Exécution des commandes magiques :
-        # --type g : Pilote Game Ready (mets 's' pour Studio si tu préfères)
-        # --silent : Installation fantôme sans cliquer sur "Suivant"
-        # --clean : Nettoie les anciens profils pour éviter les bugs
+        # Exécution silencieuse et propre (Type G = Game Ready)
         & $downloaderExe --type g --silent --clean | Out-Null
         
-        # Nettoyage de l'utilitaire
+        # Nettoyage de l'exécutable temporaire
         Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
-        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
     } catch {
         Write-Host " [Attention] Impossible de joindre les serveurs NVIDIA ou d'installer le pilote : $_" -ForegroundColor Yellow
+        if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
     Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
@@ -142,7 +140,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files\x86)\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
@@ -162,7 +160,6 @@ function Run-LocalActivationScript {
     $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
     
     try {
-        # Téléchargement via liens de redirection directe Google Drive (Sans clé API exposée)
         Invoke-WebRequest -Uri $script:urlActivation -OutFile $tempPathActivation -ErrorAction Stop
         Invoke-WebRequest -Uri $script:urlMasAio -OutFile $tempPathMasAio -ErrorAction Stop
         
