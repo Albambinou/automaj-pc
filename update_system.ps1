@@ -15,29 +15,37 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE
+# AUTO-ÉLÉVATION INFAILLIBLE (PASSE PAR UN FICHIER TEMPORAIRE LOCAL)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $cacheBuster = Get-Random
-    $FixedCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?v=$cacheBuster' -Headers @{'Cache-Control'='no-cache'} | iex"
+    # On sauvegarde le script actuel exact qui est en train de tourner dans le dossier Temp
+    $LocalTempScript = "$env:TEMP\run_updates_admin.ps1"
+    $MyContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
+    if (-not $MyContent) {
+        # Si lancé via iex direct, on récupère le contenu brut actuel pour le figer
+        $MyContent = (New-Object System.Net.WebClient).DownloadString("https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?v=$(Get-Random)")
+    }
+    Set-Content -Path $LocalTempScript -Value $MyContent -Encoding UTF8
 
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-Command", $FixedCommand
+        "-File", $LocalTempScript
     )
     try {
-        Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
+        # On lance le fichier local figé en Admin, aucun risque de charger l'ancienne version de GitHub
+        Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -Wait
+        Remove-Item -Path $LocalTempScript -Force -ErrorAction SilentlyContinue
     } catch {
         Clear-Host
-        Write-Host "[ERREUR] Ce script a absolument besoin des droits administrateur pour fonctionner." -ForegroundColor Red
+        Write-Host "[ERREUR] Ce script a besoin des droits administrateur." -ForegroundColor Red
         Read-Host "Appuyez sur Entrée pour quitter..."
     }
     Exit
 }
 
-# Ajustement automatique de la taille de la fenêtre (Largeur: 85, Hauteur: 35)
+# Ajustement automatique de la taille de la fenêtre
 $size = New-Object System.Management.Automation.Host.Size(85, 35)
 $host.UI.RawUI.WindowSize = $size
 $host.UI.RawUI.BufferSize = $size
@@ -54,9 +62,6 @@ Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Détermination du dossier local où se trouve ce script
-$ScriptDir = If ($PSScriptRoot) { $PSScriptRoot } Else { Get-Location }
-
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : WINDOWS UPDATE
 # -------------------------------------------------------------------------
@@ -70,7 +75,6 @@ if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
 
 try {
     $updates = Get-WindowsUpdate -ErrorAction Stop
-    
     if ($updates) {
         Write-Host " -> MISE $a_grave JOUR TROUV${e_aigu}E !" -ForegroundColor Green
         Write-Host " -> T${e_aigu}l${e_aigu}chargement et installation lanc${e_aigu}e..." -ForegroundColor Yellow
@@ -98,25 +102,22 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     
     try {
-        # Vérification / Installation transparente de Chocolatey si absent
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Host " -> Configuration du gestionnaire de pilotes sécurisé..." -ForegroundColor Cyan
+            Write-Host " -> Configuration du gestionnaire de pilotes s${e_aigu}curis${e_aigu}..." -ForegroundColor Cyan
             $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
             Invoke-Expression $chocoScript | Out-Null
-            # Rafraîchissement de l'environnement pour rendre 'choco' disponible immédiatement
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         }
 
         Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Commande magique Chocolatey : cherche, télécharge et déploie de manière 100% silencieuse
-        # upgrade installe le pilote s'il est manquant ou le met à jour s'il y a une nouveauté.
+        # Chocolatey gère le téléchargement lourd et l'installation silencieuse de A à Z
         choco upgrade nvidia-display-driver -y --no-progress -r | Out-Null
 
         Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
     } catch {
-        Write-Host " [Attention] Impossible de mettre à jour le pilote via le canal automatique : $_" -ForegroundColor Yellow
+        Write-Host " [Attention] Impossible de mettre à jour le pilote via Chocolatey : $_" -ForegroundColor Yellow
     }
 } else {
     Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
@@ -127,7 +128,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365 (INSTALLATION ET VÉRIFICATION ACTIVATION)
+# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
