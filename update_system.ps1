@@ -11,21 +11,32 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION PROPRE ET SÉCURISÉE
+# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (GÈRE LE LOCAL ET L'EXÉCUTION EN MÉMOIRE)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
+    Write-Host "Demande des droits administrateur en cours..." -ForegroundColor Yellow
+    
     if ($PSCommandPath) {
-        Write-Host "Demande des droits administrateur en cours..." -ForegroundColor Yellow
+        # Cas 1 : Le script est exécuté depuis un fichier .ps1 local
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-        Exit
     } else {
-        Clear-Host
-        Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
-        Write-Host "Le script doit ${e_circo}tre sauvegard${e_aigu} dans un fichier .ps1 avant d'${e_circo}tre ex${e_aigu}cut${e_aigu}." -ForegroundColor Yellow
-        Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
-        Exit
+        # Cas 2 : Le script est lancé directement en mémoire (ex: via irm | iex depuis GitHub)
+        $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
+        if ($ScriptContent) {
+            $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
+            Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
+            
+            # On lance le fichier temporaire élevé et on attend sa fermeture pour le supprimer
+            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs -Wait
+            Remove-Item -Path $TempFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Clear-Host
+            Write-Host "[ERREUR FATALE] Impossible de r${e_aigu}cup${e_aigu}rer le code en m${e_aigu}moire pour l'${e_aigu}l${e_aigu}vation." -ForegroundColor Red
+            Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
+        }
     }
+    Exit
 }
 
 # Ajustement automatique de la taille de la fenêtre
