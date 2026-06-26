@@ -91,7 +91,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (AVEC LE NOUVEL OUTIL DE FARAG2)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (LIEN UNIVERSEL LATEST)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -103,35 +103,35 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
     $downloaderExe = "$env:TEMP\Nvidia-Driver-Downloader.exe"
-    # URL mise à jour vers le dépôt de farag2
-    $urlDownloader = "https://github.com/farag2/NVidia-Driver-Downloader/releases/download/v3.0.1/Nvidia-Driver-Downloader.exe"
+    # LIEN CORRIGÉ : Redirection vers la toute dernière release de farag2
+    $urlDownloader = "https://github.com/farag2/NVidia-Driver-Downloader/releases/latest/download/Nvidia-Driver-Downloader.exe"
 
     try {
         # Nettoyage d'un résidu éventuel
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
 
-        # Téléchargement via curl
+        # Téléchargement via curl (le paramètre -L est crucial pour suivre la redirection de GitHub)
         $curlArgs = @("-L", "-s", "-A", "Mozilla/5.0", $urlDownloader, "-o", $downloaderExe)
         Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
         
-        # Vérification de la validité du fichier (doit peser plus de 1 Mo pour être un vrai exécutable)
+        # Vérification du fichier (doit être > 1 Mo)
         if (Test-Path $downloaderExe) {
             $fileSize = (Get-Item $downloaderExe).Length
             if ($fileSize -gt 1048576) {
                 Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
                 Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-                # syntaxe farag2 : --type g (Game Ready), --silent, --clean
+                # Exécution silencieuse
                 & $downloaderExe --type g --silent --clean | Out-Null
                 
                 Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
             } else {
-                Write-Host " [Attention] Le fichier téléchargé est incomplet. Le lien GitHub a peut-être changé." -ForegroundColor Yellow
+                Write-Host " [Attention] Le fichier téléchargé est incomplet. Le lien de téléchargement a rencontré un problème." -ForegroundColor Yellow
             }
             # Nettoyage
             Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA de farag2." -ForegroundColor Yellow
+            Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA." -ForegroundColor Yellow
         }
     } catch {
         Write-Host " [Attention] Impossible d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
