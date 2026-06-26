@@ -17,6 +17,7 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE (CORRIGÉE)
 # -------------------------------------------------------------------------
+# Correction ici : Utilisation de [Security.Principal.WindowsBuiltInRole] au lieu du type doublé
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     # CORRECTIF CACHE : On génère une clé unique à l'intérieur même du script qui va forcer la fenêtre admin à charger la nouveauté
@@ -145,7 +146,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files\x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
@@ -248,7 +249,7 @@ if (-not $isOfficeInstalled) {
 # -------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "   TOUTES LES MISES $a_grave JOUR SONT TERMIN${e_aigu}ES ! MERCI.   " -ForegroundColor Green
+Write-Host "    TOUTES LES MISES $a_grave JOUR SONT TERMIN${e_aigu}ES ! MERCI.   " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 Read-Host "Vous pouvez fermer cette fen${e_circo}tre en appuyant sur Entr${e_aigu}e..."
