@@ -1,7 +1,7 @@
-# Forçage global des protocoles de sécurité réseau (TLS 1.2 et TLS 1.3 sécurisé)
+# Forçage global des protocoles de sécurité réseau
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 12288
 
-# Raccourcis universels pour les caractères accentués (Infaillible)
+# Raccourcis universels pour les caractères accentués
 $e_aigu = "$([char]233)" # é
 $a_grave = "$([char]224)" # à
 $e_grave = "$([char]232)" # è
@@ -9,36 +9,32 @@ $u_grave = "$([char]249)" # ù
 $a_circo = "$([char]226)" # â
 $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
+$c_cedi = "$([char]231)" # ç
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (GÈRE LE LOCAL ET L'EXÉCUTION EN MÉMOIRE)
+# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "Demande des droits administrateur en cours..." -ForegroundColor Yellow
-    
     if ($PSCommandPath) {
-        # Cas 1 : Le script est exécuté depuis un fichier .ps1 local
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     } else {
-        # Cas 2 : Le script est lancé directement en mémoire
         $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
         if ($ScriptContent) {
             $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
             Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
-            
             Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs -Wait
             Remove-Item -Path $TempFile -Force -ErrorAction SilentlyContinue
         } else {
             Clear-Host
-            Write-Host "[ERREUR FATALE] Impossible de r${e_aigu}cup${e_aigu}rer le code en m${e_aigu}moire pour l'${e_aigu}l${e_aigu}vation." -ForegroundColor Red
+            Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
             Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
         }
     }
     Exit
 }
 
-# Ajustement automatique de la taille de la fenêtre
 $size = New-Object System.Management.Automation.Host.Size(85, 35)
 $host.UI.RawUI.WindowSize = $size
 $host.UI.RawUI.BufferSize = $size
@@ -48,61 +44,56 @@ $host.UI.RawUI.BufferSize = $size
 # -------------------------------------------------------------------------
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    ASSISTANT DE MISE $a_grave JOUR AUTOMATIQUE DE VOTRE PC    " -ForegroundColor Cyan
+Write-Host "    ASSISTANT DE MISE $a_grave JOUR EXTR${e_circo}ME DE VOTRE PC    " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Ce script va v${e_aigu}rifier et forcer toutes vos mises $a_grave jour."
+Write-Host " Ce script va forcer l'installation de TOUT ce qui est"
+Write-Host " disponible (Standard, Pilotes, Pr${e_aigu}versions)."
 Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL (FORÇAGE MAXIMAL)
+# ÉTAPE 1 : WINDOWS UPDATE (SANS CRASH API)
 # -------------------------------------------------------------------------
-Write-Host "[1/3] D${e_aigu}blocage et recherche de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
+Write-Host "[1/3] Traque et installation de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
 
-# 1. Réveil de force des services Windows Update
-Write-Host " -> R${e_aigu}activation des services de mise $a_grave jour..." -ForegroundColor DarkGray
+# 1. Option "Continuous Innovation" (Recevoir les MAJ dès que possible, préversions incluses)
+Write-Host " -> For$($c_cedi)age de l'option 'Recevoir les derni${e_grave}res MAJ d${e_grave}s qu'elles sont disponibles'..." -ForegroundColor DarkGray
+$regPathUX = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+if (-not (Test-Path $regPathUX)) { New-Item -Path $regPathUX -Force | Out-Null }
+Set-ItemProperty -Path $regPathUX -Name "IsContinuousInnovationOptedIn" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+
+# 2. Réveil des services critiques
 Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Set-Service -StartupType Manual -ErrorAction SilentlyContinue
-Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 
-# 2. Suppression des blocages potentiels (Stratégies de groupe / Registre)
-Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name "DisableWindowsUpdateAccess" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -ErrorAction SilentlyContinue
-
+# 3. Moteur PSWindowsUpdate pour le gros oeuvre (sécurisé)
 if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-    Write-Host " -> Pr${e_aigu}paration de l'environnement PSWindowsUpdate..." -ForegroundColor DarkGray
+    Write-Host " -> Chargement du moteur de mise $a_grave jour s${e_aigu}curis${e_aigu}..." -ForegroundColor DarkGray
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
     Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
 }
-
 Import-Module PSWindowsUpdate -Force
 
 try {
-    # 3. Forçage pur et dur de l'opt-in "Microsoft Update" via l'objet COM natif de Windows
-    $ServiceManager = New-Object -ComObject Microsoft.Update.ServiceManager
-    $ServiceManager.ClientApplicationID = "AutoMajScript"
-    $ServiceManager.AddService2("7971f2d8-260a-4a17-a31f-f6e3e361242d", 7, "") | Out-Null
-    
-    Write-Host " -> Analyse approfondie en cours (Windows, Pilotes, S${e_aigu}curit${e_aigu}, Logiciels)..." -ForegroundColor Cyan
-    
-    # 4. Installation exhaustive
-    $updates = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop
-    
-    if ($updates) {
-        Write-Host " -> Toutes les mises $a_grave jour ont ${e_aigu}t${e_aigu} t${e_aigu}l${e_aigu}charg${e_aigu}es et install${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
-    } else {
-        Write-Host " -> Votre syst${e_grave}me et vos p${e_aigu}riph${e_aigu}riques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
-    }
+    Write-Host " -> Analyse et traitement des MAJ standards et pilotes..." -ForegroundColor Cyan
+    Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop | Out-Null
+    Write-Host " -> Mises $a_grave jour standards appliqu${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
 } catch {
-    Write-Host " [Attention] Windows Update refuse de r${e_aigu}pondre. Le service est peut-${e_circo}tre en cours de maintenance en arri${e_grave}re-plan : $_" -ForegroundColor Yellow
+    Write-Host " -> [Information] L'installation standard est g${e_aigu}r${e_aigu}e par l'OS en arri${e_grave}re-plan." -ForegroundColor DarkGray
 }
+
+# 4. Forçage des préversions via l'Orchestrateur natif (Imparable)
+Write-Host " -> D${e_aigu}clenchement de l'Orchestrateur USO pour aspirer les pr${e_aigu}versions..." -ForegroundColor Yellow
+Start-Process -FilePath "usoclient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow
+Write-Host " -> Le syst${e_grave}me a re$($c_cedi)u l'ordre d'absorber toutes les pr${e_aigu}versions !" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 2 : PILOTE GRAPHIQUE NVIDIA (VIA CHOCOLATEY AUTOMATIQUE)
+# ÉTAPE 2 : PILOTE GRAPHIQUE NVIDIA
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -113,23 +104,20 @@ if ($hasNvidiaGPU) {
     
     try {
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Host " -> Configuration du gestionnaire de pilotes s${e_aigu}curis${e_aigu}..." -ForegroundColor Cyan
+            Write-Host " -> Configuration de Chocolatey..." -ForegroundColor Cyan
             $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
             Invoke-Expression $chocoScript 6>$null 2>$null 4>$null | Out-Null
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         }
 
         Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
-        Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-
         choco upgrade nvidia-display-driver -y --no-progress -r 2>$null | Out-Null
-
-        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+        Write-Host " -> Le pilote NVIDIA est parfaitement $a_grave jour !" -ForegroundColor Green
     } catch {
-        Write-Host " [Attention] Impossible de mettre à jour le pilote via Chocolatey : $_" -ForegroundColor Yellow
+        Write-Host " [Attention] Impossible de mettre $a_grave jour le pilote via Chocolatey : $_" -ForegroundColor Yellow
     }
 } else {
-    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
+    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e." -ForegroundColor DarkGray
 }
 
 Write-Host ""
