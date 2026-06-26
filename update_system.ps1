@@ -19,11 +19,9 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # On sauvegarde le script actuel exact qui est en train de tourner dans le dossier Temp
     $LocalTempScript = "$env:TEMP\run_updates_admin.ps1"
     $MyContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
     if (-not $MyContent) {
-        # Si lancé via iex direct, on récupère le contenu brut actuel pour le figer
         $MyContent = (New-Object System.Net.WebClient).DownloadString("https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?v=$(Get-Random)")
     }
     Set-Content -Path $LocalTempScript -Value $MyContent -Encoding UTF8
@@ -34,7 +32,6 @@ if (-not $isAdmin) {
         "-File", $LocalTempScript
     )
     try {
-        # On lance le fichier local figé en Admin, aucun risque de charger l'ancienne version de GitHub
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -Wait
         Remove-Item -Path $LocalTempScript -Force -ErrorAction SilentlyContinue
     } catch {
@@ -92,7 +89,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (VIA CHOCOLATEY AUTOMATIQUE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (NETTOYÉ ET TOTALEMENT SILENCIEUX)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -102,18 +99,19 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     
     try {
+        # Installation ultra-silencieuse de Chocolatey (Sorties standard, erreurs et warnings redirigées vers Out-Null)
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Write-Host " -> Configuration du gestionnaire de pilotes s${e_aigu}curis${e_aigu}..." -ForegroundColor Cyan
             $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
-            Invoke-Expression $chocoScript | Out-Null
+            Invoke-Expression $chocoScript 6>$null 2>$null 4>$null | Out-Null
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         }
 
         Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Chocolatey gère le téléchargement lourd et l'installation silencieuse de A à Z
-        choco upgrade nvidia-display-driver -y --no-progress -r | Out-Null
+        # Exécution de choco upgrade 100% masquée sans pollution visuelle
+        choco upgrade nvidia-display-driver -y --no-progress -r 2>$null | Out-Null
 
         Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
     } catch {
