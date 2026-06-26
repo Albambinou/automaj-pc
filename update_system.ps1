@@ -90,74 +90,42 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE ET APPLICATION NVIDIA
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MISE À JOUR 100% AUTOMATIQUE)
 # -------------------------------------------------------------------------
-Write-Host "[2/3] V${e_aigu}rification des pilotes graphique..." -ForegroundColor Magenta
+Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
-$pathNvidiaApp = "C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe"
-$pathGeForce = "C:\Program Files\NVIDIA Corporation\GeForce Experience\LaunchGFExperience.exe"
+# Détection de la présence d'une carte graphique NVIDIA sur le PC
+$hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object {$_.Name -match "NVIDIA"})
 
-$isNvidiaInstalled = (Test-Path $pathNvidiaApp) -or (Test-Path $pathGeForce)
-
-if (-not $isNvidiaInstalled) {
-    Write-Host " -> [!] NVIDIA App n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
+if ($hasNvidiaGPU) {
+    Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
+    Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    $confirmationNvidia = Read-Host "Voulez-vous installer NVIDIA App et ses pilotes ? (Y/N)"
-    if ($confirmationNvidia -match "^[yYoO]$") {
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel NVIDIA en cours..." -ForegroundColor Cyan
-        $urlNvidia = "https://us.download.nvidia.com/nvapp/client/11.0.7.247/NVIDIA_app_v11.0.7.247.exe"
-        $tempPathNvidia = "$env:TEMP\NVIDIA_app_setup.exe"
+    # Emplacement temporaire du téléchargeur automatique
+    $downloaderExe = "$env:TEMP\NVDownloader.exe"
+    $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
+
+    try {
+        # 1. Téléchargement de l'utilitaire de détection officielle
+        Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -ErrorAction Stop
         
-        try {
-            Invoke-WebRequest -Uri $urlNvidia -OutFile $tempPathNvidia -ErrorAction Stop
-            Write-Host " -> Lancement de l'installation silencieuse..." -ForegroundColor Cyan
-            Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-            
-            Start-Process -FilePath $tempPathNvidia -ArgumentList "/s" -Wait -NoNewWindow
-            Remove-Item -Path $tempPathNvidia -Force -ErrorAction SilentlyContinue
-            
-            if (Test-Path $pathNvidiaApp) {
-                Write-Host " -> NVIDIA App et le pilote graphique ont ${e_aigu}t${e_aigu} install${e_aigu}s avec succ${e_grave}s !" -ForegroundColor Green
-            } else {
-                Write-Host " -> [Attention] L'installation a pris fin mais l'application est introuvable." -ForegroundColor Yellow
-            }
-        } catch {
-            Write-Host " [ERREUR] Impossible de t${e_aigu}l${e_aigu}charger le fichier depuis les serveurs NVIDIA : $_" -ForegroundColor Red
-        }
-    } else {
-        Write-Host " -> Étape NVIDIA ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
+        Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
+        Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+
+        # 2. Exécution des commandes magiques :
+        # --type g : Pilote Game Ready (mets 's' pour Studio si tu préfères)
+        # --silent : Installation fantôme sans cliquer sur "Suivant"
+        # --clean : Nettoie les anciens profils pour éviter les bugs
+        & $downloaderExe --type g --silent --clean | Out-Null
+        
+        # Nettoyage de l'utilitaire
+        Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
+        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+    } catch {
+        Write-Host " [Attention] Impossible de joindre les serveurs NVIDIA ou d'installer le pilote : $_" -ForegroundColor Yellow
     }
-    
 } else {
-    Write-Host " -> NVIDIA est pr${e_aigu}sent sur ce PC." -ForegroundColor Green
-    $demandeNvidia = Read-Host "Voulez-vous forcer Winget $a_grave chercher une mise $a_grave jour NVIDIA ? (Y/N)"
-    
-    if ($demandeNvidia -match "^[yYoO]$") {
-        Write-Host " -> Recherche d'un nouveau pilote via Winget en cours..." -ForegroundColor Cyan
-        
-        $wingetPath = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-        if (-not $wingetPath) { $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
-
-        $wingetJob = Start-Job -ScriptBlock {
-            param($exe)
-            & $exe source update --accept-source-agreements | Out-Null
-            return (& $exe upgrade --include-unknown 2>$null | Select-String "Nvidia","GeForce")
-        } -ArgumentList $wingetPath
-        
-        $completedJob = Wait-Job $wingetJob -Timeout 35
-        $nvidiaCheck = if ($completedJob) { Receive-Job $wingetJob } else { $null }
-        if ($wingetJob) { Remove-Job $wingetJob -Force }
-
-        if ($nvidiaCheck) {
-            Write-Host " -> NOUVEAU PILOTE TROUV${e_aigu} VIA WINGET !" -ForegroundColor Green
-            & $wingetPath upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-            Write-Host " -> Le logiciel NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
-        } else {
-            Write-Host " -> Winget ne d${e_aigu}tecte aucune mise $a_grave jour. Utilisez l'application NVIDIA ou Windows Update pour vos pilotes spécifiques." -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host " -> V${e_aigu}rification NVIDIA pass${e_aigu}e." -ForegroundColor DarkGray
-    }
+    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
 }
 
 Write-Host ""
