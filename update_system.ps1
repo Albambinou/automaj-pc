@@ -88,7 +88,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE COMPILÉE UNIVERSELLE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE VRM STABILISÉE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -104,27 +104,28 @@ if ($hasNvidiaGPU) {
     try {
         if (Test-Path $vrmExe) { Remove-Item -Path $vrmExe -Force -ErrorAction SilentlyContinue }
 
-        # Téléchargement propre de l'outil autonome
-        Invoke-WebRequest -Uri $vrmUrl -OutFile $vrmExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
+        # Utilisation de curl.exe natif pour un téléchargement réseau beaucoup plus résistant aux coupures
+        $curlArgs = @("-L", "-s", "-A", "Mozilla/5.0", $vrmUrl, "-o", $vrmExe)
+        Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
 
         if (Test-Path $vrmExe) {
             Write-Host " -> Analyse des serveurs NVIDIA, t${e_aigu}l${e_aigu}chargement et installation..." -ForegroundColor Cyan
             Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-            # vrm détecte automatiquement le GPU de la machine et applique les bons flags de production silencieux
+            # Exécution de vrm
             $vrmArgs = @("driver", "--install", "--silent", "--clean")
             $process = Start-Process -FilePath $vrmExe -ArgumentList $vrmArgs -Wait -PassThru -NoNewWindow
 
             if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+                Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} traité avec succès !" -ForegroundColor Green
             } else {
-                Write-Host " [Information] Le pilote NVIDIA est d${e_aigu}j$a_grave $a_grave jour ou l'outil a fini son traitement." -ForegroundColor Green
+                Write-Host " [Information] Le pilote NVIDIA est déjà à jour ou l'outil a fini son traitement." -ForegroundColor Green
             }
             
             # Nettoyage
             Remove-Item -Path $vrmExe -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host " [Attention] Impossible de charger le module de mise à jour." -ForegroundColor Yellow
+            Write-Host " [Attention] Impossible de charger le module de mise à jour (Fichier absent)." -ForegroundColor Yellow
         }
     } catch {
         Write-Host " [Attention] Erreur lors de la mise à jour automatique NVIDIA : $_" -ForegroundColor Yellow
