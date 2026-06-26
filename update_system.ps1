@@ -91,7 +91,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE NATIVE POWERSHELL)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (RÉSOLU VIA API GITHUB)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -103,36 +103,48 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
     $downloaderExe = "$env:TEMP\Nvidia-Driver-Downloader.exe"
-    $urlDownloader = "https://github.com/farag2/NVidia-Driver-Downloader/releases/latest/download/Nvidia-Driver-Downloader.exe"
 
     try {
         # Nettoyage d'un résidu éventuel
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
 
-        # Utilisation de Invoke-WebRequest (natif) au lieu de curl pour mieux gérer les redirections GitHub
-        Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
-        
-        # Vérification du fichier (doit être > 1 Mo)
-        if (Test-Path $downloaderExe) {
-            $fileSize = (Get-Item $downloaderExe).Length
-            if ($fileSize -gt 1048576) {
-                Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
-                Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+        # Étape Robuste : On demande à l'API GitHub de nous donner le lien exact de l'exécutable de la dernière release
+        $apiResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/farag2/NVidia-Driver-Downloader/releases/latest" -UserAgent "Mozilla/5.0" -ErrorAction Stop
+        $urlDownloader = ($apiResponse.assets | Where-Object { $_.name -eq "Nvidia-Driver-Downloader.exe" }).browser_download_url
 
-                # Exécution silencieuse
-                & $downloaderExe --type g --silent --clean | Out-Null
-                
-                Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+        if (-not $urlDownloader) {
+            # Si le .exe direct n'est pas trouvé, on cherche un nom approchant
+            $urlDownloader = ($apiResponse.assets | Where-Object { $_.name -like "*Nvidia-Driver-Downloader*.exe" })[0].browser_download_url
+        }
+
+        if ($urlDownloader) {
+            # Téléchargement depuis l'URL directe récupérée
+            Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
+            
+            # Vérification de la taille (> 1 Mo)
+            if (Test-Path $downloaderExe) {
+                $fileSize = (Get-Item $downloaderExe).Length
+                if ($fileSize -gt 1048576) {
+                    Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
+                    Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+
+                    # Exécution silencieuse
+                    & $downloaderExe --type g --silent --clean | Out-Null
+                    
+                    Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+                } else {
+                    Write-Host " [Attention] Le fichier téléchargé est anormalement petit ($($fileSize) octets)." -ForegroundColor Yellow
+                }
+                # Nettoyage
+                Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
             } else {
-                Write-Host " [Attention] Le fichier téléchargé est trop petit ($($fileSize) octets). Redirection GitHub bloquée." -ForegroundColor Yellow
+                Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA." -ForegroundColor Yellow
             }
-            # Nettoyage
-            Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA." -ForegroundColor Yellow
+            Write-Host " [Attention] Impossible de trouver l'exécutable dans la dernière release GitHub." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host " [Attention] Impossible de télécharger ou d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
+        Write-Host " [Attention] Impossible d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
