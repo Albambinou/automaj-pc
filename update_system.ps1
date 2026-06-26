@@ -19,10 +19,8 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # Astuce ultime : on reprend exactement le script en cours d'exécution sans réécrire l'URL
     $MyCommand = if ($MyInvocation.Line) { $MyInvocation.Line } else { "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex" }
     
-    # Si la commande tapée n'avait pas le anti-cache, on lui injecte de force
     if ($MyCommand -notmatch "Cache-Control") {
         $MyCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
     }
@@ -95,7 +93,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MISE À JOUR 100% AUTOMATIQUE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (AVEC L'OUTIL OFFICIEL DE BEYAZIT YILMAZ)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -106,17 +104,20 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    $downloaderExe = "$env:TEMP\NVDownloader.exe"
-    $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
+    $downloaderExe = "$env:TEMP\nvidia-driver-downloader.exe"
+    # Utilisation du dépôt officiel mis à jour en v2.4.0 par Beyazit Yilmaz
+    $urlDownloader = "https://github.com/Aetf/NVIDIA-Driver-Downloader/releases/download/v2.4.0/nvidia-driver-downloader.exe"
 
     try {
-        # Téléchargement de l'utilitaire
-        Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -ErrorAction Stop
+        # Utilisation du WebClient .NET blindé avec en-têtes de navigation intégrés
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        $webClient.DownloadFile($urlDownloader, $downloaderExe)
         
         Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Exécution silencieuse (Type G = Game Ready)
+        # Exécution silencieuse avec l'outil de Beyazit (Type G = Game Ready)
         & $downloaderExe --type g --silent --clean | Out-Null
         
         # Nettoyage de l'exécutable temporaire
@@ -143,8 +144,8 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
-    $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath64 = "C:\\Program Files\\Microsoft Office\\Office16\\ospp.vbs"
+    $vbsPath32 = "C:\\Program Files (x86)\\Microsoft Office\\Office16\\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
@@ -167,8 +168,10 @@ function Run-LocalActivationScript {
     $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
     
     try {
-        Invoke-WebRequest -Uri $urlActivation -OutFile $tempPathActivation -ErrorAction Stop
-        Invoke-WebRequest -Uri $urlMasAio -OutFile $tempPathMasAio -ErrorAction Stop
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("user-agent", "Mozilla/5.0")
+        $wc.DownloadFile($urlActivation, $tempPathActivation)
+        $wc.DownloadFile($urlMasAio, $tempPathMasAio)
         
         Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
@@ -192,7 +195,9 @@ if (-not $isOfficeInstalled) {
         $tempPathOffice = "$env:TEMP\Office365_setup.exe"
         
         try {
-            Invoke-WebRequest -Uri $urlOffice -OutFile $tempPathOffice -ErrorAction Stop
+            $wcOffice = New-Object System.Net.WebClient
+            $wcOffice.DownloadFile($urlOffice, $tempPathOffice)
+            
             Write-Host " -> Lancement de l'installation d'Office 365..." -ForegroundColor Cyan
             Write-Host " -> Suivez la progression dans la fen${e_circo}tre d'installation Orange." -ForegroundColor Cyan
             
@@ -233,7 +238,7 @@ if (-not $isOfficeInstalled) {
     } else {
         Write-Host " -> Licence Microsoft Office valide et activ${e_aigu}e." -ForegroundColor Green
         Write-Host " -> Recherche et application des mises $a_grave jour Office en cours..." -ForegroundColor Cyan
-        $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
+        $pathC2R = "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe"
         if (Test-Path $pathC2R) {
             Start-Process -FilePath $pathC2R -ArgumentList "/update user updatetoversion=16.0 displaylevel=false forceappshutdown=false" -Wait -NoNewWindow
             Write-Host " -> Mises $a_grave jour Office trait${e_aigu}es avec succ${e_grave}s." -ForegroundColor Green
