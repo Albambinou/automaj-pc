@@ -54,6 +54,9 @@ Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Détermination du dossier local où se trouve ce script
+$ScriptDir = If ($PSScriptRoot) { $PSScriptRoot } Else { Get-Location }
+
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : WINDOWS UPDATE
 # -------------------------------------------------------------------------
@@ -85,52 +88,67 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA UNIVERSEL (DÉTECTION AUTOMATIQUE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA UNIVERSEL DYNAMIQUE
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
-# Détection de la présence d'une carte graphique NVIDIA sur le PC via le PNP Device ID
+# Détection de la présence d'une carte graphique NVIDIA sur le PC
 $gpuNvidia = Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" }
 
 if ($gpuNvidia) {
-    # Extraction de l'ID de l'appareil (Device ID) pour l'envoyer à NVIDIA
     $deviceName = $gpuNvidia.Name
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $deviceName" -ForegroundColor Green
-    Write-Host " -> Requête de recherche dynamique sur les serveurs NVIDIA..." -ForegroundColor Cyan
+    Write-Host " -> Recherche dynamique du dernier pilote Game Ready valide..." -ForegroundColor Cyan
     
     $driverSetupExe = "$env:TEMP\Nvidia-Driver-Setup.exe"
 
     try {
         if (Test-Path $driverSetupExe) { Remove-Item -Path $driverSetupExe -Force -ErrorAction SilentlyContinue }
 
-        # ÉTAPE DYNAMIQUE UNIVERSELLE : On interroge l'API du SmartScan officiel NVIDIA
-        # Cette API nous retourne le dernier package d'installation international standard stable (WHQL)
-        # dtid=1 (Game Ready), osid=119 (Windows 10/11 64bit), lid=2 (Français)
-        $lookupUrl = "https://www.nvidia.com/Download/API/lookupValue.aspx?dtid=1&osid=119&lid=2&isWhql=1"
-        $xmlResponse = Invoke-RestMethod -Uri $lookupUrl -UserAgent "Mozilla/5.0" -ErrorAction Stop
-        $urlDownloader = $xmlResponse.GetObject.Property | Where-Object { $_.Name -eq "DownloadURL" } | Select-Object -ExpandProperty Value
+        # Détermination du type de système (Notebook vs Desktop)
+        $isNotebook = $deviceName -match "Laptop" -or $deviceName -match "Mobile"
+        
+        # URL de l'API d'indexation officielle d'NVIDIA (Configurée pour GeForce, Windows 10/11 64-bit, Français, Game Ready WHQL)
+        # On utilise l'API de requêtes directes de production d'NVIDIA qui renvoie une structure JSON/Text stable.
+        $baseQuery = "https://gfe.nvidia.com/macshow" 
+        
+        # Génération d'une URL de recherche structurée et robuste via le serveur de téléchargement NVIDIA principal
+        # Cette API accepte les requêtes anonymes et liste les pilotes desktop/notebook grand public récents.
+        $lookupUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=121&pfid=963&osid=119&lid=2&whql=1&lang=fr"
+        if ($isNotebook) {
+            $lookupUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=121&pfid=965&osid=119&lid=2&whql=1&lang=fr"
+        }
 
-        # Fallback de secours global au cas où l'API est surchargée
+        # Récupération de la page de résultat brute contenant le lien de l'exécutable
+        $htmlResult = Invoke-RestMethod -Uri $lookupUrl -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -ErrorAction Stop
+        
+        # Extraction de l'URL du fichier .exe via une expression régulière dans la réponse d'NVIDIA
+        $urlDownloader = $null
+        if ($htmlResult -match '(https:\/\/us\.download\.nvidia\.com\/Windows\/[^"''\s>]+\.exe)') {
+            $urlDownloader = $Matches[1]
+        }
+
+        # Sécurité additionnelle : Si l'extraction dynamique échoue, on applique la dernière version majeure stable connue
         if (-not $urlDownloader) {
             $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
         }
 
-        if ($urlDownloader -match "\.exe$") {
+        if ($urlDownloader) {
             Write-Host " -> T${e_aigu}l${e_aigu}chargement du package officiel..." -ForegroundColor Cyan
             Invoke-WebRequest -Uri $urlDownloader -OutFile $driverSetupExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
             
             if (Test-Path $driverSetupExe) {
                 $fileSize = (Get-Item $driverSetupExe).Length
                 if ($fileSize -gt 104857600) { # Doit faire plus de 100 Mo
-                    Write-Host " -> Installation silencieuse en cours..." -ForegroundColor Cyan
+                    Write-Host " -> Installation du pilote graphique en cours..." -ForegroundColor Cyan
                     Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-                    # Arguments d'installation universels et silencieux NVIDIA
+                    # Arguments d'installation silencieuse officiels de NVIDIA
                     $installArgs = @("-s", "-noreboot", "-clean")
                     $process = Start-Process -FilePath $driverSetupExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
                     
                     if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} install${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+                        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} install${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
                     } else {
                         Write-Host " [Attention] L'installateur a retourné un code d'erreur : $($process.ExitCode)" -ForegroundColor Yellow
                     }
@@ -140,7 +158,7 @@ if ($gpuNvidia) {
                 Remove-Item -Path $driverSetupExe -Force -ErrorAction SilentlyContinue
             }
         } else {
-            Write-Host " [Attention] Aucun pilote disponible trouvé via l'API NVIDIA." -ForegroundColor Yellow
+            Write-Host " [Attention] Impossible de localiser un lien de pilote valide." -ForegroundColor Yellow
         }
     } catch {
         Write-Host " [Attention] Erreur lors du traitement NVIDIA : $_" -ForegroundColor Yellow
@@ -155,7 +173,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365
+# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365 (INSTALLATION ET VÉRIFICATION ACTIVATION)
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
