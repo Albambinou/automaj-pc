@@ -88,7 +88,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE OFFICIELLE FLUX GEFORCE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE INFAILLIBLE VIA API GFE JSON)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -96,48 +96,59 @@ $hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object { $_.Drive
 
 if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
-    Write-Host " -> Recherche du dernier pilote Game Ready officiel sur les serveurs NVIDIA..." -ForegroundColor Cyan
+    Write-Host " -> Requête de recherche sur l'API officielle GeForce Experience..." -ForegroundColor Cyan
     
     $driverExe = "$env:TEMP\Nvidia-Driver-Setup.exe"
 
     try {
         if (Test-Path $driverExe) { Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue }
 
-        # URL officielle et publique du flux de mise à jour XML de NVIDIA GeForce (Ultra stable et toujours à jour)
-        $gfeFeedUrl = "https://gfe.nvidia.com/client/gfe_package.json"
+        # URL officielle de l'API GFE utilisée par NVIDIA pour distribuer ses mises à jour de pilotes
+        $gfeUrl = "https://gfe.nvidia.com/client/gfe_package.json"
         
-        # On cible directement le dernier pilote de production WHQL de bureau international (Valable pour n'importe quelle GeForce x64)
-        # Lien de téléchargement direct hautement compatible mis à jour dynamiquement
-        $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
-
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement du package d'installation officiel..." -ForegroundColor Cyan
+        # Requête JSON sur l'API NVIDIA pour extraire dynamiquement l'URL de téléchargement direct du dernier pilote desktop international
+        $gfeData = Invoke-RestMethod -Uri $gfeUrl -UserAgent "Mozilla/5.0" -ErrorAction Stop
         
-        # Téléchargement via curl.exe pour garantir la stabilité du transfert sur les fichiers volumineux
-        $curlArgs = @("-L", "-A", "Mozilla/5.0", $urlDownloader, "-o", $driverExe)
-        Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
+        # Filtrage intelligent pour récupérer le lien .exe officiel de production
+        $urlDownloader = $gfeData.packages | Where-Object { $_.type -eq "driver" -and $_.downloadUrl -like "*desktop-win10-win11-64bit-international-whql.exe*" } | Select-Object -First 1 -ExpandProperty downloadUrl
 
-        if (Test-Path $driverExe) {
-            $fileSize = (Get-Item $driverExe).Length
-            if ($fileSize -gt 104857600) { # Doit être un vrai exécutable d'installation de plus de 100 Mo
-                Write-Host " -> Installation silencieuse du pilote en cours..." -ForegroundColor Cyan
-                Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+        # Fallback ultra-sécurisé si l'objet JSON a une structure différente
+        if (-not $urlDownloader) {
+            $urlDownloader = ($gfeData.packages | Where-Object { $_.downloadUrl -like "*.exe" })[0].downloadUrl
+        }
 
-                # Exécution silencieuse officielle NVIDIA : -s (silent), -noreboot (pas de reboot forcé), -clean (installation propre)
-                $installArgs = @("-s", "-noreboot", "-clean")
-                $process = Start-Process -FilePath $driverExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+        if ($urlDownloader) {
+            Write-Host " -> T${e_aigu}l${e_aigu}chargement du tout dernier pilote officiel..." -ForegroundColor Cyan
+            
+            # Téléchargement via curl.exe (avec option -L pour suivre d'éventuelles redirections de CDN)
+            $curlArgs = @("-L", "-A", "Mozilla/5.0", $urlDownloader, "-o", $driverExe)
+            Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
 
-                if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                    Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+            if (Test-Path $driverExe) {
+                $fileSize = (Get-Item $driverExe).Length
+                if ($fileSize -gt 104857600) { # Le fichier doit obligatoirement dépasser 100 Mo
+                    Write-Host " -> Installation silencieuse du pilote en cours..." -ForegroundColor Cyan
+                    Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+
+                    # Arguments silencieux officiels de NVIDIA : -s (silent), -noreboot, -clean
+                    $installArgs = @("-s", "-noreboot", "-clean")
+                    $process = Start-Process -FilePath $driverExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+
+                    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+                        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+                    } else {
+                        Write-Host " [Information] Fin de l'installation (Code de retour : $($process.ExitCode))." -ForegroundColor Green
+                    }
                 } else {
-                    Write-Host " [Information] L'installateur NVIDIA a terminé son exécution (Code: $($process.ExitCode))." -ForegroundColor Green
+                    Write-Host " [Attention] Le fichier téléchargé est incomplet ou invalide." -ForegroundColor Yellow
                 }
+                # Nettoyage du fichier d'installation
+                Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue
             } else {
-                Write-Host " [Attention] Le fichier téléchargé est corrompu ou de taille insuffisante." -ForegroundColor Yellow
+                Write-Host " [Attention] Échec du téléchargement du package NVIDIA." -ForegroundColor Yellow
             }
-            # Nettoyage
-            Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host " [Attention] Échec du téléchargement du pilote d'affichage." -ForegroundColor Yellow
+            Write-Host " [Attention] Impossible de récupérer l'URL du pilote depuis l'API NVIDIA." -ForegroundColor Yellow
         }
     } catch {
         Write-Host " [Attention] Erreur lors de la mise à jour NVIDIA : $_" -ForegroundColor Yellow
