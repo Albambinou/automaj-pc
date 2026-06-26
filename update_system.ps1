@@ -12,15 +12,18 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (COMPATIBLE GITHUB IRM / IEX)
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (CORRIGÉE SANS CACHE ET 100% RAW)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
+    # On récupère dynamiquement l'URL brute qui a servi à lancer le script
+    $URL_Courante = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1"
+    
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        # Ajout du Get-Random ici aussi pour la relance Admin
-        "-Command", "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' | iex"
+        # On force le RAW et le bypass de cache avec Get-Random pour la bascule Admin
+        "-Command", "irm '$URL_Courante`?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
     )
     try {
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
