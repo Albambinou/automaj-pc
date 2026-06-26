@@ -12,12 +12,6 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# CONFIGURATION GOOGLE DRIVE (LIENS DE TÉLÉCHARGEMENT DIRECTS PUBLICS)
-# -------------------------------------------------------------------------
-$urlActivation = "https://docs.google.com/uc?export=download&id=1Foqv3lwXMpgN_KB0djqD0cnVyIJmsv5g"
-$urlMasAio      = "https://docs.google.com/uc?export=download&id=12szspJHsBUIk62hqV6OgYODYSnpg2TIK"
-
-# -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (COMPATIBLE GITHUB IRM / IEX)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -102,7 +96,6 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
     $downloaderExe = "$env:TEMP\NVDownloader.exe"
-    # Utilisation du binaire stable de détection et téléchargement direct de pilotes
     $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
 
     try {
@@ -112,7 +105,7 @@ if ($hasNvidiaGPU) {
         Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Exécution silencieuse et propre (Type G = Game Ready)
+        # Exécution silencieuse (Type G = Game Ready)
         & $downloaderExe --type g --silent --clean | Out-Null
         
         # Nettoyage de l'exécutable temporaire
@@ -140,7 +133,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files\x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
@@ -154,14 +147,18 @@ if ($isOfficeInstalled) {
 }
 
 function Run-LocalActivationScript {
-    Write-Host " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis Google Drive..." -ForegroundColor Cyan
+    Write-Host " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis GitHub..." -ForegroundColor Cyan
+    
+    # Retour aux liens de téléchargement directs et publics de GitHub
+    $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
+    $urlMasAio      = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/MAS_AIO.cmd"
     
     $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
     $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
     
     try {
-        Invoke-WebRequest -Uri $script:urlActivation -OutFile $tempPathActivation -ErrorAction Stop
-        Invoke-WebRequest -Uri $script:urlMasAio -OutFile $tempPathMasAio -ErrorAction Stop
+        Invoke-WebRequest -Uri $urlActivation -OutFile $tempPathActivation -ErrorAction Stop
+        Invoke-WebRequest -Uri $urlMasAio -OutFile $tempPathMasAio -ErrorAction Stop
         
         Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
@@ -171,7 +168,7 @@ function Run-LocalActivationScript {
         
         Write-Host " -> Activation termin${e_aigu}e. Retour au script principal." -ForegroundColor Green
     } catch {
-        Write-Host " -> [Attention] Impossible de r${e_aigu}cup${e_aigu}rer ou d'ex${e_aigu}cuter les fichiers d'activation depuis Google Drive." -ForegroundColor Yellow
+        Write-Host " -> [Attention] Impossible de r${e_aigu}cup${e_aigu}rer ou d'ex${e_aigu}cuter les fichiers d'activation depuis GitHub." -ForegroundColor Yellow
     }
 }
 
