@@ -15,16 +15,22 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (CORRIGÉE SANS CACHE ET 100% RAW)
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR INDÉSTRUCTIBLE (100% AUTOMATIQUE)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $URL_Courante = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1"
+    # Astuce ultime : on reprend exactement le script en cours d'exécution sans réécrire l'URL
+    $MyCommand = if ($MyInvocation.Line) { $MyInvocation.Line } else { "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex" }
     
+    # Si la commande tapée n'avait pas le anti-cache, on lui injecte de force
+    if ($MyCommand -notmatch "Cache-Control") {
+        $MyCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
+    }
+
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-Command", "irm '$URL_Courante`?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
+        "-Command", $MyCommand
     )
     try {
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
@@ -138,7 +144,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
