@@ -129,17 +129,15 @@ if (-not $isNvidiaInstalled) {
     }
     
 } else {
-    # CORRECTIF : Trouver le chemin absolu de winget pour éviter le bug des Jobs PowerShell
-    $wingetPath = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-    if (-not $wingetPath) {
-        $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-    }
-
-    if (-not (Test-Path $wingetPath)) {
-        Write-Host " -> NVIDIA est pr${e_aigu}sent mais l'outil winget est introuvable pour v${e_aigu}rifier les pilotes." -ForegroundColor Yellow
-    } else {
-        Write-Host " -> NVIDIA APP est d${e_aigu}tect${e_aigu}. Recherche d'un nouveau pilote ou d'une mise $a_grave jour..." -ForegroundColor Cyan
+    Write-Host " -> NVIDIA est pr${e_aigu}sent sur ce PC." -ForegroundColor Green
+    $demandeNvidia = Read-Host "Voulez-vous forcer Winget $a_grave chercher une mise $a_grave jour NVIDIA ? (Y/N)"
+    
+    if ($demandeNvidia -match "^[yYoO]$") {
+        Write-Host " -> Recherche d'un nouveau pilote via Winget en cours..." -ForegroundColor Cyan
         
+        $wingetPath = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+        if (-not $wingetPath) { $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
+
         $wingetJob = Start-Job -ScriptBlock {
             param($exe)
             & $exe source update --accept-source-agreements | Out-Null
@@ -147,34 +145,18 @@ if (-not $isNvidiaInstalled) {
         } -ArgumentList $wingetPath
         
         $completedJob = Wait-Job $wingetJob -Timeout 35
-        
-        if ($null -eq $completedJob) {
-            Remove-Job $wingetJob -Force
-            Write-Host " -> [Information] Recherche Winget trop longue. Passage $a_grave la suite." -ForegroundColor Yellow
-            $nvidiaCheck = $null
-        } else {
-            $nvidiaCheck = Receive-Job $wingetJob
-            Remove-Job $wingetJob
-        }
+        $nvidiaCheck = if ($completedJob) { Receive-Job $wingetJob } else { $null }
+        if ($wingetJob) { Remove-Job $wingetJob -Force }
 
         if ($nvidiaCheck) {
-            Write-Host " -> NOUVEAU PILOTE TROUV${e_aigu} !" -ForegroundColor Green
-            Write-Host " -> T${e_aigu}l${e_aigu}chargement et mise $a_grave jour en cours..." -ForegroundColor Yellow
-            
-            $installJob = Start-Job -ScriptBlock {
-                param($exe)
-                & $exe upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-                & $exe upgrade --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-            } -ArgumentList $wingetPath
-            $completedInstall = Wait-Job $installJob -Timeout 150
-            Remove-Job $installJob -Force
-
-            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+            Write-Host " -> NOUVEAU PILOTE TROUV${e_aigu} VIA WINGET !" -ForegroundColor Green
+            & $wingetPath upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            Write-Host " -> Le logiciel NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
         } else {
-            if ($null -ne $completedJob) {
-                Write-Host " -> Votre carte graphique et vos logiciels NVIDIA sont d${e_aigu}j$a_grave $a_grave jour." -ForegroundColor Green
-            }
+            Write-Host " -> Winget ne d${e_aigu}tecte aucune mise $a_grave jour. Utilisez l'application NVIDIA ou Windows Update pour vos pilotes spécifiques." -ForegroundColor Yellow
         }
+    } else {
+        Write-Host " -> V${e_aigu}rification NVIDIA pass${e_aigu}e." -ForegroundColor DarkGray
     }
 }
 
