@@ -91,7 +91,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (LIEN UNIVERSEL LATEST)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE NATIVE POWERSHELL)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -103,16 +103,14 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
     $downloaderExe = "$env:TEMP\Nvidia-Driver-Downloader.exe"
-    # LIEN CORRIGÉ : Redirection vers la toute dernière release de farag2
     $urlDownloader = "https://github.com/farag2/NVidia-Driver-Downloader/releases/latest/download/Nvidia-Driver-Downloader.exe"
 
     try {
         # Nettoyage d'un résidu éventuel
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
 
-        # Téléchargement via curl (le paramètre -L est crucial pour suivre la redirection de GitHub)
-        $curlArgs = @("-L", "-s", "-A", "Mozilla/5.0", $urlDownloader, "-o", $downloaderExe)
-        Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
+        # Utilisation de Invoke-WebRequest (natif) au lieu de curl pour mieux gérer les redirections GitHub
+        Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
         
         # Vérification du fichier (doit être > 1 Mo)
         if (Test-Path $downloaderExe) {
@@ -126,7 +124,7 @@ if ($hasNvidiaGPU) {
                 
                 Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
             } else {
-                Write-Host " [Attention] Le fichier téléchargé est incomplet. Le lien de téléchargement a rencontré un problème." -ForegroundColor Yellow
+                Write-Host " [Attention] Le fichier téléchargé est trop petit ($($fileSize) octets). Redirection GitHub bloquée." -ForegroundColor Yellow
             }
             # Nettoyage
             Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
@@ -134,7 +132,7 @@ if ($hasNvidiaGPU) {
             Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host " [Attention] Impossible d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
+        Write-Host " [Attention] Impossible de télécharger ou d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
