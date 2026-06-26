@@ -15,12 +15,13 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR STABLE ET FIXE (SANS REPRISE DE LIGNE)
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE (PROPRE ET DIRECTE)
 # -------------------------------------------------------------------------
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRoleBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # On force une commande propre, sans jamais lire le contenu de ton terminal ou de ton presse-papier
-    $FixedCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
+    # CORRECTIF CACHE : On génère une clé unique à l'intérieur même du script qui va forcer la fenêtre admin à charger la nouveauté
+    $cacheBuster = Get-Random
+    $FixedCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?v=$cacheBuster' -Headers @{'Cache-Control'='no-cache'} | iex"
 
     $arguments = @(
         "-NoProfile",
@@ -127,7 +128,7 @@ if ($hasNvidiaGPU) {
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
-    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -Workspace DarkGray
+    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
 }
 
 Write-Host ""
