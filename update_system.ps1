@@ -1,15 +1,17 @@
 # Forçage global des protocoles de sécurité réseau
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 12288
 
-# Raccourcis universels pour les caractères accentués
-$e_aigu = "$([char]233)" # é
-$a_grave = "$([char]224)" # à
-$e_grave = "$([char]232)" # è
-$u_grave = "$([char]249)" # ù
-$a_circo = "$([char]226)" # â
-$e_circo = "$([char]234)" # ê
-$o_circo = "$([char]244)" # ô
-$c_cedi = "$([char]231)" # ç
+# Raccourcis universels pour les caractères accentués (Noms distincts pour éviter les conflits)
+$e_aigu      = "$([char]233)" # é
+$a_grave     = "$([char]224)" # à
+$e_grave     = "$([char]232)" # è
+$u_grave     = "$([char]249)" # ù
+$a_circo     = "$([char]226)" # â
+$e_circo     = "$([char]234)" # ê
+$o_circo     = "$([char]244)" # ô
+$c_cedi      = "$([char]231)" # ç
+$maj_e_aigu  = "$([char]201)" # É
+$maj_a_grave = "$([char]192)" # À
 
 # -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE
@@ -35,16 +37,19 @@ if (-not $isAdmin) {
     Exit
 }
 
-$size = New-Object System.Management.Automation.Host.Size(85, 35)
-$host.UI.RawUI.WindowSize = $size
-$host.UI.RawUI.BufferSize = $size
+# Définition d'une fenêtre compacte mais avec un historique de défilement géant
+$windowSize = New-Object System.Management.Automation.Host.Size(85, 35)
+$bufferSize = New-Object System.Management.Automation.Host.Size(85, 3000) # 3000 lignes d'historique !
+
+$host.UI.RawUI.BufferSize = $bufferSize
+$host.UI.RawUI.WindowSize = $windowSize
 
 # -------------------------------------------------------------------------
 # DÉBUT DU SCRIPT PRINCIPAL
 # -------------------------------------------------------------------------
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    ASSISTANT DE MISE $a_grave JOUR EXTR${e_circo}ME DE VOTRE PC    " -ForegroundColor Cyan
+Write-Host "    ASSISTANT DE MISE $maj_a_grave JOUR EXTR${e_circo}ME DE VOTRE PC    " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Ce script va forcer l'installation de TOUT ce qui est"
 Write-Host " disponible (Standard, Pilotes, Pr${e_aigu}versions)."
@@ -53,7 +58,38 @@ Write-Host "==========================================================" -Foregro
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE
+# ÉTAPE 0 : SÉCURISATION DES PILOTES (ANTI-BLOCAGE GPO)
+# -------------------------------------------------------------------------
+Write-Host "[0/3] Lib${e_aigu}ration des restrictions d'installation de p${e_aigu}riph${e_aigu}riques..." -ForegroundColor Magenta
+
+$gpoRestrictionsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+
+# Création de la clé de registre si elle n'existe pas
+if (-not (Test-Path $gpoRestrictionsPath)) {
+    New-Item -Path $gpoRestrictionsPath -Force | Out-Null
+}
+
+try {
+    # On passe la valeur de blocage à 0 (Désactivé) pour autoriser l'installation des écrans/pilotes
+    Set-ItemProperty -Path $gpoRestrictionsPath -Name "DenyUnspecified" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    
+    # Nettoyage des autres clés de blocage potentielles créées par des GPO restrictives
+    Remove-ItemProperty -Path $gpoRestrictionsPath -Name "DenyDeviceIDs" -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $gpoRestrictionsPath -Name "DenyDeviceClasses" -ErrorAction SilentlyContinue
+    
+    # Force Windows à appliquer immédiatement la stratégie
+    gpupdate /force | Out-Null
+    Write-Host " -> Autorisation d'installation des pilotes appliqu${e_aigu}e avec succ${e_grave}s !" -ForegroundColor Green
+} catch {
+    Write-Host " -> [Information] Impossible de modifier la restriction GPO en arrière-plan." -ForegroundColor DarkGray
+}
+
+Write-Host ""
+Write-Host "----------------------------------------------------------"
+Write-Host ""
+
+# -------------------------------------------------------------------------
+# ÉTAPE 1 : WINDOWS UPDATE & MICROSOFT STORE
 # -------------------------------------------------------------------------
 Write-Host "[1/3] Traque et installation de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
 
@@ -83,10 +119,113 @@ try {
     Write-Host " -> [Information] L'installation standard est g${e_aigu}r${e_aigu}e par l'OS en arri${e_grave}re-plan." -ForegroundColor DarkGray
 }
 
-# 4. Forçage des préversions via l'Orchestrateur natif
+# 4. Forçage des préversions via l'Orchestrateur natif (Imparable)
 Write-Host " -> D${e_aigu}clenchement de l'Orchestrateur USO pour aspirer les pr${e_aigu}versions..." -ForegroundColor Yellow
 Start-Process -FilePath "usoclient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow
 Write-Host " -> Le syst${e_grave}me a re$($c_cedi)u l'ordre d'absorber toutes les pr${e_aigu}versions !" -ForegroundColor Green
+
+# 5. Menu interactif stable à position fixe (Conserve l'historique du haut)
+Write-Host " -> Rafra$([char]238)chissement de la base de donn${e_aigu}es des applications..." -ForegroundColor DarkGray
+winget source update | Out-Null
+
+Write-Host " -> Analyse des mises $a_grave jour d'applications disponibles..." -ForegroundColor Cyan
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    $upgradeList = winget upgrade | Where-Object { $_ -match '\s+(winget|msstore)\s*$' }
+    
+    $apps = @()
+    foreach ($line in $upgradeList) {
+        $rawLine = $line.ToString()
+        $columns = $rawLine -split '\s{2,}' | Where-Object { $_.Trim() -ne '' }
+        
+        if ($columns.Count -ge 2) {
+            $name = $columns[0].Trim()
+            $id = $columns[1].Trim()
+            if ($name -and $id -and $name -notmatch "upgrades available" -and $name -notmatch "mises $a_grave jour") {
+                $apps += [PSCustomObject]@{ Name = $name; Id = $id; Selected = $false }
+            }
+        }
+    }
+
+    if ($apps.Count -eq 0) {
+        Write-Host " -> Toutes les applications logicielles et Store sont d${e_aigu}j$a_grave $a_grave jour !" -ForegroundColor Green
+    } else {
+        $choosing = $true
+        Write-Host ""
+        Write-Host "==========================================================" -ForegroundColor Cyan
+        Write-Host "          S${e_aigu}LECTION DES APPLICATIONS $maj_a_grave METTRE $maj_a_grave JOUR        " -ForegroundColor Cyan
+        Write-Host "==========================================================" -ForegroundColor Cyan
+        Write-Host " Entrez le num${e_aigu}ro d'une appli pour la s${e_aigu}lectionner / d${e_aigu}s${e_aigu}lectionner."
+        Write-Host " Tapez 0 pour TOUT s${e_aigu}lectionner ou TOUT d${e_aigu}s${e_aigu}lectionner."
+        Write-Host " Appuyez sur ENTR${e_aigu}E sans rien taper pour valider et lancer."
+        Write-Host "----------------------------------------------------------"
+        
+        $startRow = [Console]::CursorTop
+
+        while ($choosing) {
+            [Console]::SetCursorPosition(0, $startRow)
+            Write-Host ""
+            
+            # Option globale 0
+            $anySelected = $null -ne ($apps | Where-Object { $_.Selected -eq $true })
+            if ($anySelected) {
+                Write-Host "  [0] " -NoNewline -ForegroundColor Green
+                Write-Host "TOUT D${e_aigu}S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor Green
+            } else {
+                Write-Host "    0  " -NoNewline -ForegroundColor Gray
+                Write-Host "TOUT S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor White
+            }
+            
+            # Liste des applications
+            for ($i = 0; $i -lt $apps.Count; $i++) {
+                $num = $i + 1
+                $cleanLine = "$($apps[$i].Name)".PadRight(45)
+                if ($apps[$i].Selected) {
+                    Write-Host "  [$num] " -NoNewline -ForegroundColor Green
+                    Write-Host $cleanLine -ForegroundColor Green
+                } else {
+                    Write-Host "    $num  " -NoNewline -ForegroundColor Gray
+                    Write-Host $cleanLine -ForegroundColor White
+                }
+            }
+            
+            Write-Host ""
+            Write-Host (" " * $host.UI.RawUI.WindowSize.Width) -NoNewline
+            [Console]::SetCursorPosition(0, [Console]::CursorTop)
+            
+            $input = Read-Host "Votre choix (ex: 1) "
+
+            if ([string]::IsNullOrWhiteSpace($input)) {
+                $choosing = $false
+            } elseif ($input -eq "0") {
+                $targetState = -not $anySelected
+                foreach ($app in $apps) { $app.Selected = $targetState }
+            } elseif ($input -as [int] -and ($input -as [int]) -le $apps.Count -and ($input -as [int]) -gt 0) {
+                $index = ($input -as [int]) - 1
+                $apps[$index].Selected = -not $apps[$index].Selected
+            }
+        }
+
+        # Filtrage et exécution des applications sélectionnées
+        $selectedApps = $apps | Where-Object { $_.Selected }
+        
+        if ($selectedApps.Count -gt 0) {
+            Write-Host ""
+            Write-Host " -> Pr${e_aigu}paration de l'installation des applications s${e_aigu}lectionn${e_aigu}es..." -ForegroundColor Cyan
+            foreach ($app in $selectedApps) {
+                Write-Host ""
+                Write-Host " -> [Mise $a_grave jour] $($app.Name) en cours..." -ForegroundColor Yellow
+                winget upgrade --id $app.Id --accept-package-agreements --accept-source-agreements --include-unknown
+            }
+            Write-Host ""
+            Write-Host " -> Les applications s${e_aigu}lectionn${e_aigu}es ont ${e_aigu}t${e_aigu} trait${e_aigu}es !" -ForegroundColor Green
+        } else {
+            Write-Host ""
+            Write-Host " -> Aucune application s${e_aigu}lectionn${e_aigu}e. ${maj_e_aigu}tape ignor${e_aigu}e." -ForegroundColor DarkGray
+        }
+    }
+} else {
+    Write-Host " -> [Attention] L'outil 'winget' est introuvable. ${maj_e_aigu}tape saut${e_aigu}e." -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "----------------------------------------------------------"
@@ -112,7 +251,7 @@ if ($hasNvidiaGPU) {
 
         Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
         choco upgrade nvidia-display-driver -y --no-progress -r 2>$null | Out-Null
-        Write-Host " -> Le pilote NVIDIA est parfaitement $a_grave jour !" -ForegroundColor Green
+        Write-Host " -> Le pilote NVIDIA is parfaitement $a_grave jour !" -ForegroundColor Green
     } catch {
         Write-Host " [Attention] Impossible de mettre $a_grave jour le pilote via Chocolatey : $_" -ForegroundColor Yellow
     }
@@ -125,7 +264,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365
+# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365 (DÉTECTION D'ACTIVATION SÉCURISÉE)
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
@@ -151,12 +290,10 @@ if ($isOfficeInstalled) {
     if ($targetVbs -and (Test-Path $targetVbs)) {
         $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
         
-        # CORRECTIF DÉTECTION
         if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
             $isOfficeActivated = $true
         }
     } else {
-        # Si ospp.vbs est introuvable, on vérifie la présence de clés de registre d'activation Office 365 standards
         $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name "ProductReleaseIds" -ErrorAction SilentlyContinue
         if ($regCheck) { $isOfficeActivated = $true }
     }
@@ -181,7 +318,7 @@ function Run-LocalActivationScript {
             Write-Host " -> [Attention] Fichier d'activation introuvable après téléchargement." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host " -> [Attention] Impossible de joindre GitHub pour l'activation." -ForegroundColor Yellow
+        Write-Host " -> [Attention] Impossible de joindre GitHub for l'activation." -ForegroundColor Yellow
     } finally {
         if (Test-Path $tempPathActivation) { Remove-Item -Path $tempPathActivation -Force }
         if (Test-Path $tempPathMasAio) { Remove-Item -Path $tempPathMasAio -Force }
@@ -218,7 +355,7 @@ if (-not $isOfficeInstalled) {
             Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
         }
     } else {
-        Write-Host " -> Étape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
+        Write-Host " -> ${maj_e_aigu}tape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
     }
 } else {
     Write-Host " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." -ForegroundColor Green
@@ -247,7 +384,7 @@ if (-not $isOfficeInstalled) {
 # -------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    TOUTES LES MISES $a_grave JOUR SONT TERMIN${e_aigu}ES ! MERCI.   " -ForegroundColor Green
+Write-Host "    TOUTES LES MISES $maj_a_grave JOUR SONT TERMIN${maj_e_aigu}ES ! MERCI.   " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 Read-Host "Vous pouvez fermer cette fen${e_circo}tre en appuyant sur Entr${e_aigu}e..."
