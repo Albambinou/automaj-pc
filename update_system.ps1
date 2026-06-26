@@ -1,11 +1,7 @@
-# Forçage global des protocoles de sécurité réseau (TLS 1.2 et TLS 1.3)
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+# Forçage global des protocoles de sécurité réseau (TLS 1.2 et TLS 1.3 sécurisé)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 12288
 
-# Forçage strict de l'encodage de la console en UTF-8
-[console]::InputEncoding = [System.Text.Encoding]::UTF8
-[console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-# Raccourcis universels pour les caractères accentués
+# Raccourcis universels pour les caractères accentués (Infaillible)
 $e_aigu = "$([char]233)" # é
 $a_grave = "$([char]224)" # à
 $e_grave = "$([char]232)" # è
@@ -15,31 +11,21 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION INFAILLIBLE (PASSE PAR UN FICHIER TEMPORAIRE LOCAL)
+# AUTO-ÉLÉVATION PROPRE ET SÉCURISÉE
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $LocalTempScript = "$env:TEMP\run_updates_admin.ps1"
-    $MyContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
-    if (-not $MyContent) {
-        $MyContent = (New-Object System.Net.WebClient).DownloadString("https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?v=$(Get-Random)")
-    }
-    Set-Content -Path $LocalTempScript -Value $MyContent -Encoding UTF8
-
-    $arguments = @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $LocalTempScript
-    )
-    try {
-        Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -Wait
-        Remove-Item -Path $LocalTempScript -Force -ErrorAction SilentlyContinue
-    } catch {
+    if ($PSCommandPath) {
+        Write-Host "Demande des droits administrateur en cours..." -ForegroundColor Yellow
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        Exit
+    } else {
         Clear-Host
-        Write-Host "[ERREUR] Ce script a besoin des droits administrateur." -ForegroundColor Red
-        Read-Host "Appuyez sur Entrée pour quitter..."
+        Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
+        Write-Host "Le script doit ${e_circo}tre sauvegard${e_aigu} dans un fichier .ps1 avant d'${e_circo}tre ex${e_aigu}cut${e_aigu}." -ForegroundColor Yellow
+        Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
+        Exit
     }
-    Exit
 }
 
 # Ajustement automatique de la taille de la fenêtre
@@ -54,40 +40,37 @@ Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "    ASSISTANT DE MISE $a_grave JOUR AUTOMATIQUE DE VOTRE PC    " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Ce script va v${e_aigu}rifier et installer vos mises $a_grave jour."
+Write-Host " Ce script va v${e_aigu}rifier et installer toutes vos mises $a_grave jour."
 Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL (TOUTES CATEGORIES)
+# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL
 # -------------------------------------------------------------------------
 Write-Host "[1/3] Recherche globale de TOUTES les mises $a_grave jour Windows Update..." -ForegroundColor Magenta
 
 if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-    Write-Host " -> Pr${e_aigu}paration de l'environnement (${e_aigu}tape unique)..." -ForegroundColor DarkGray
+    Write-Host " -> Pr${e_aigu}paration de l'environnement PSWindowsUpdate..." -ForegroundColor DarkGray
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
     Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
 }
 
-try {
-    $ServiceManager = New-Object -ComObject Microsoft.Update.ServiceManager
-    $ServiceManager.AddService2("7971f2d8-260a-4a17-a31f-f6e3e361242d", 7, "") | Out-Null
+Import-Module PSWindowsUpdate
 
-    $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -ErrorAction Stop
+try {
+    Add-WUServiceManager -ServiceID "7971f2d8-260a-4a17-a31f-f6e3e361242d" -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    Write-Host " -> Analyse en cours (Windows, Pilotes, S${e_aigu}curit${e_aigu}, Logiciels Microsoft)..." -ForegroundColor Cyan
+    
+    $updates = Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -AutoReboot:$false -ErrorAction Stop
     
     if ($updates) {
-        Write-Host " -> Mises $a_grave jour trouv${e_aigu}es ($($updates.Count) en attente) !" -ForegroundColor Green
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement et installation de la totalit${e_aigu} des paquets..." -ForegroundColor Yellow
-        
-        Get-WindowsUpdate -MicrosoftUpdate -Category "SecurityUpdate", "CriticalUpdate", "Update", "Driver", "FeaturePack", "ServicePack" -Install -AcceptAll -AutoReboot:$false -ErrorAction SilentlyContinue | Out-Null
-        
-        Write-Host " -> L'ensemble des mises $a_grave jour a ${e_aigu}t${e_aigu} install${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
+        Write-Host " -> Toutes les mises $a_grave jour ont ${e_aigu}t${e_aigu} t${e_aigu}l${e_aigu}charg${e_aigu}es et install${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
     } else {
-        Write-Host " -> Votre Windows et vos p${e_aigu}riph${e_aigu}riques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
+        Write-Host " -> Votre syst${e_grave}me et vos p${e_aigu}riph${e_aigu}riques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
     }
 } catch {
-    Write-Host " [Information] Windows Update est temporairement occup${e_aigu} ou inaccessible." -ForegroundColor Yellow
+    Write-Host " [Information] Windows Update est temporairement occup${e_aigu} ou inaccessible : $_" -ForegroundColor Yellow
 }
 
 Write-Host ""
