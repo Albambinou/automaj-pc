@@ -54,6 +54,9 @@ Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Détermination du dossier local où se trouve ce script
+$ScriptDir = If ($PSScriptRoot) { $PSScriptRoot } Else { Get-Location }
+
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : WINDOWS UPDATE
 # -------------------------------------------------------------------------
@@ -85,7 +88,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE COMPATIBLE TOUTES CARTES GEFORCE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (VIA CHOCOLATEY AUTOMATIQUE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -93,50 +96,27 @@ $hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object { $_.Drive
 
 if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
-    Write-Host " -> Recherche du dernier pilote de production international..." -ForegroundColor Cyan
     
-    $driverExe = "$env:TEMP\Nvidia-Driver-Setup.exe"
-
     try {
-        if (Test-Path $driverExe) { Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue }
-
-        # URL officielle directe de production NVIDIA pour toutes les cartes GeForce Desktop (64-bit Windows 10/11)
-        # Utilise le CDN us standard stable et lourd
-        $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
-
-        if ($urlDownloader) {
-            Write-Host " -> T${e_aigu}l${e_aigu}chargement du package d'installation..." -ForegroundColor Cyan
-            
-            # Correction des arguments de curl : pas d'espaces mal fermés ou d'en-tête User-Agent brisé
-            $curlArgs = @("-L", $urlDownloader, "-o", $driverExe)
-            Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
-
-            if (Test-Path $driverExe) {
-                $fileSize = (Get-Item $driverExe).Length
-                if ($fileSize -gt 104857600) { # Doit faire plus de 100 Mo
-                    Write-Host " -> Installation silencieuse du pilote en cours..." -ForegroundColor Cyan
-                    Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-
-                    # Arguments silencieux NVIDIA standard : -s = silent, -noreboot, -clean
-                    $installArgs = @("-s", "-noreboot", "-clean")
-                    $process = Start-Process -FilePath $driverExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
-
-                    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} traité avec succès !" -ForegroundColor Green
-                    } else {
-                        Write-Host " [Information] Fin du traitement de l'installateur (Code : $($process.ExitCode))." -ForegroundColor Green
-                    }
-                } else {
-                    Write-Host " [Attention] Le fichier téléchargé est trop petit ($($fileSize) octets)." -ForegroundColor Yellow
-                }
-                Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue
-            } else {
-                Write-Host " [Attention] Échec du téléchargement du package NVIDIA." -ForegroundColor Yellow
-            }
+        # Vérification / Installation transparente de Chocolatey si absent
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Write-Host " -> Configuration du gestionnaire de pilotes sécurisé..." -ForegroundColor Cyan
+            $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
+            Invoke-Expression $chocoScript | Out-Null
+            # Rafraîchissement de l'environnement pour rendre 'choco' disponible immédiatement
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         }
+
+        Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
+        Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+
+        # Commande magique Chocolatey : cherche, télécharge et déploie de manière 100% silencieuse
+        # upgrade installe le pilote s'il est manquant ou le met à jour s'il y a une nouveauté.
+        choco upgrade nvidia-display-driver -y --no-progress -r | Out-Null
+
+        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
     } catch {
-        Write-Host " [Attention] Erreur lors de la mise à jour NVIDIA : $_" -ForegroundColor Yellow
-        if (Test-Path $driverExe) { Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue }
+        Write-Host " [Attention] Impossible de mettre à jour le pilote via le canal automatique : $_" -ForegroundColor Yellow
     }
 } else {
     Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
