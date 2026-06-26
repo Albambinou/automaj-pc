@@ -1,3 +1,6 @@
+# Forçage global des protocoles de sécurité réseau (TLS 1.2 et TLS 1.3)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+
 # Forçage strict de l'encodage de la console en UTF-8
 [console]::InputEncoding = [System.Text.Encoding]::UTF8
 [console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -16,13 +19,11 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # On récupère dynamiquement l'URL brute qui a servi à lancer le script
     $URL_Courante = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1"
     
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        # On force le RAW et le bypass de cache avec Get-Random pour la bascule Admin
         "-Command", "irm '$URL_Courante`?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
     )
     try {
@@ -99,9 +100,6 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    # CORRECTIF: On force l'utilisation du protocole TLS 1.2 pour éviter les coupures réseau inattendues
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    
     $downloaderExe = "$env:TEMP\NVDownloader.exe"
     $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
 
@@ -140,7 +138,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
