@@ -15,9 +15,9 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE (PROPRE ET DIRECTE)
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR CRUSH-CACHE (CORRIGÉE)
 # -------------------------------------------------------------------------
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRoleBuiltInRole]::Administrator)
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     # CORRECTIF CACHE : On génère une clé unique à l'intérieur même du script qui va forcer la fenêtre admin à charger la nouveauté
     $cacheBuster = Get-Random
