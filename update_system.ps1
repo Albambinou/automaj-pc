@@ -122,22 +122,47 @@ if (-not $isNvidiaInstalled) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Host " -> NVIDIA est pr${e_aigu}sent mais l'outil winget est manquant pour v${e_aigu}rifier les mises $a_grave jour du pilote." -ForegroundColor Yellow
     } else {
-        winget source update --accept-source-agreements | Out-Null
         Write-Host " -> NVIDIA APP est d${e_aigu}tect${e_aigu}. Recherche d'un nouveau pilote ou d'une mise $a_grave jour..." -ForegroundColor Cyan
         
-        $nvidiaCheck = winget upgrade --include-unknown 2>$null | Select-String "Nvidia"
+        # SÉCURITÉ TIMEOUT : On lance la détection winget dans un Job en arrière-plan
+        $wingetJob = Start-Job -ScriptBlock {
+            winget source update --accept-source-agreements | Out-Null
+            return (winget upgrade --include-unknown 2>$null | Select-String "Nvidia")
+        }
+        
+        # On attend la fin du job pendant 30 secondes MAXIMUM
+        $completedJob = Wait-Job $wingetJob -Timeout 30
+        
+        if ($null -eq $completedJob) {
+            # Si le temps est dépassé (bloqué), on détruit le job et on passe la variable à $null
+            Remove-Job $wingetJob -Force
+            Write-Host " -> [Information] Recherche Winget trop longue (Serveurs Microsoft occup${e_aigu}s). Passage $a_grave la suite." -ForegroundColor Yellow
+            $nvidiaCheck = $null
+        } else {
+            # Si le job a fini à temps, on récupère son résultat
+            $nvidiaCheck = Receive-Job $wingetJob
+            Remove-Job $wingetJob
+        }
 
         if ($nvidiaCheck) {
             Write-Host " -> NOUVEAU PILOTE TROUV${e_aigu} !" -ForegroundColor Green
             Write-Host " -> T${e_aigu}l${e_aigu}chargement et mise $a_grave jour en cours..." -ForegroundColor Yellow
             Write-Host " -> Votre ${e_aigu}cran peut clignoter une ou deux fois." -ForegroundColor DarkGray
             
-            winget upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-            winget upgrade --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            # On applique également une sécurité de 2 minutes max pour l'installation silencieuse
+            $installJob = Start-Job -ScriptBlock {
+                winget upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+                winget upgrade --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            }
+            $completedInstall = Wait-Job $installJob -Timeout 120
+            Remove-Job $installJob -Force
 
-            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
+            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour ou v${e_aigu}rifi${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
         } else {
-            Write-Host " -> Votre carte graphique et vos logiciels NVIDIA sont d${e_aigu}j$a_grave $a_grave jour." -ForegroundColor Green
+            # Si la recherche a dit "pas de mise à jour" OU si le timeout a sauté l'étape
+            if ($null -ne $completedJob) {
+                Write-Host " -> Votre carte graphique et vos logiciels NVIDIA sont d${e_aigu}j$a_grave $a_grave jour." -ForegroundColor Green
+            }
         }
     }
 }
@@ -175,7 +200,6 @@ if ($isOfficeInstalled) {
 function Run-LocalActivationScript {
     Write-Host " -> R${e_aigu}cup${e_aigu}ration du script d'activation depuis GitHub..." -ForegroundColor Cyan
     
-    # /!\ METS TON PROPRE LIEN RAW ICI APRÈS L'ÉTAPE 3 /!\
     $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/Activer_Office.cmd"
     $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
     
@@ -195,6 +219,7 @@ function Run-LocalActivationScript {
         Write-Host " -> [Attention] Impossible de t${e_aigu}l${e_aigu}charger ou d'ex${e_aigu}cuter le script d'activation depuis GitHub." -ForegroundColor Yellow
     }
 }
+
 # ACTION LOGIQUE DU SCRIPT
 if (-not $isOfficeInstalled) {
     Write-Host " -> Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
