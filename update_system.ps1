@@ -145,7 +145,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files\x86)\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
