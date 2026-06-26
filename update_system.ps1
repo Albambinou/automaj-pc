@@ -91,7 +91,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (RÉSOLU VIA API GITHUB)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (VIA LE SCRIPT DE FARAG2)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -102,50 +102,21 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
-    $downloaderExe = "$env:TEMP\Nvidia-Driver-Downloader.exe"
+    # URL brute du script .ps1 sur le dépôt de farag2
+    $urlScriptNvidia = "https://raw.githubusercontent.com/farag2/NVidia-Driver-Downloader/main/Download_NVidia_Driver.ps1"
 
     try {
-        # Nettoyage d'un résidu éventuel
-        if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
+        Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
+        Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Étape Robuste : On demande à l'API GitHub de nous donner le lien exact de l'exécutable de la dernière release
-        $apiResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/farag2/NVidia-Driver-Downloader/releases/latest" -UserAgent "Mozilla/5.0" -ErrorAction Stop
-        $urlDownloader = ($apiResponse.assets | Where-Object { $_.name -eq "Nvidia-Driver-Downloader.exe" }).browser_download_url
+        # Téléchargement et exécution directe du script en mémoire
+        # Le script de farag2 s'exécute de manière autonome
+        $nvidiaScript = Invoke-RestMethod -Uri $urlScriptNvidia -UserAgent "Mozilla/5.0" -ErrorAction Stop
+        Invoke-Expression $nvidiaScript
 
-        if (-not $urlDownloader) {
-            # Si le .exe direct n'est pas trouvé, on cherche un nom approchant
-            $urlDownloader = ($apiResponse.assets | Where-Object { $_.name -like "*Nvidia-Driver-Downloader*.exe" })[0].browser_download_url
-        }
-
-        if ($urlDownloader) {
-            # Téléchargement depuis l'URL directe récupérée
-            Invoke-WebRequest -Uri $urlDownloader -OutFile $downloaderExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
-            
-            # Vérification de la taille (> 1 Mo)
-            if (Test-Path $downloaderExe) {
-                $fileSize = (Get-Item $downloaderExe).Length
-                if ($fileSize -gt 1048576) {
-                    Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
-                    Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-
-                    # Exécution silencieuse
-                    & $downloaderExe --type g --silent --clean | Out-Null
-                    
-                    Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
-                } else {
-                    Write-Host " [Attention] Le fichier téléchargé est anormalement petit ($($fileSize) octets)." -ForegroundColor Yellow
-                }
-                # Nettoyage
-                Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue
-            } else {
-                Write-Host " [Attention] Échec du téléchargement de l'utilitaire NVIDIA." -ForegroundColor Yellow
-            }
-        } else {
-            Write-Host " [Attention] Impossible de trouver l'exécutable dans la dernière release GitHub." -ForegroundColor Yellow
-        }
+        Write-Host " -> Le module NVIDIA a fini de s'exécuter !" -ForegroundColor Green
     } catch {
-        Write-Host " [Attention] Impossible d'exécuter le module NVIDIA : $_" -ForegroundColor Yellow
-        if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
+        Write-Host " [Attention] Impossible d'exécuter le script NVIDIA depuis GitHub : $_" -ForegroundColor Yellow
     }
 } else {
     Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
