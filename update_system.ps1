@@ -195,10 +195,8 @@ if (-not $isOfficeInstalled) {
             Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
         }
     } else {
-        Write-Host " -> Étape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
-    }
-} else {
     Write-Host " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." -ForegroundColor Green
+    
     if (-not $isOfficeActivated) {
         Write-Host " -> [Attention] Microsoft Office est pr${e_aigu}sent mais n'est pas activ${e_aigu} !" -ForegroundColor Red
         $confirmationAct = Read-Host "Voulez-vous lancer le script d'activation d'Office ? (Y/N)"
@@ -206,10 +204,20 @@ if (-not $isOfficeInstalled) {
     } else {
         Write-Host " -> Licence Microsoft Office valide et activ${e_aigu}e." -ForegroundColor Green
         Write-Host " -> Recherche et application des mises $a_grave jour Office en cours..." -ForegroundColor Cyan
+        
         $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
         if (Test-Path $pathC2R) {
-            Start-Process -FilePath $pathC2R -ArgumentList "/update user updatetoversion=16.0 displaylevel=false forceappshutdown=false" -Wait -NoNewWindow
+            # CORRECTIF DE LA MISE À JOUR D'OFFICE :
+            # 1. On réactive le mécanisme de mise à jour s'il était désactivé
+            Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -Wait -NoNewWindow
+            
+            # 2. On lance la mise à jour silencieuse vers la TOUTE DERNIÈRE version disponible sur les serveurs Microsoft
+            # forceappshutdown=true permet d'appliquer la mise à jour même si un document Word est resté ouvert en arrière-plan
+            Start-Process -FilePath $pathC2R -ArgumentList "/update user displaylevel=false forceappshutdown=true" -Wait -NoNewWindow
+            
             Write-Host " -> Mises $a_grave jour Office trait${e_aigu}es avec succ${e_grave}s." -ForegroundColor Green
+        } else {
+            Write-Host " -> [Attention] L'ex${e_aigu}cutable de mise $a_grave jour Office ClickToRun est introuvable." -ForegroundColor Yellow
         }
     }
 }
