@@ -88,81 +88,49 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA UNIVERSEL DYNAMIQUE
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE VRM UNIVERSELLE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
-# Détection de la présence d'une carte graphique NVIDIA sur le PC
-$gpuNvidia = Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" }
+$hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" })
 
-if ($gpuNvidia) {
-    $deviceName = $gpuNvidia.Name
-    Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $deviceName" -ForegroundColor Green
-    Write-Host " -> Recherche dynamique du dernier pilote Game Ready valide..." -ForegroundColor Cyan
+if ($hasNvidiaGPU) {
+    Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
+    Write-Host " -> Recherche du tout dernier pilote officiel via le module universel vrm..." -ForegroundColor Cyan
     
-    $driverSetupExe = "$env:TEMP\Nvidia-Driver-Setup.exe"
+    $vrmExe = "$env:TEMP\vrm.exe"
+    # URL de l'exécutable autonome du updater de pilotes graphiques open-source de référence
+    $vrmUrl = "https://github.com/0x7c13/vrm/releases/latest/download/vrm.exe"
 
     try {
-        if (Test-Path $driverSetupExe) { Remove-Item -Path $driverSetupExe -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $vrmExe) { Remove-Item -Path $vrmExe -Force -ErrorAction SilentlyContinue }
 
-        # Détermination du type de système (Notebook vs Desktop)
-        $isNotebook = $deviceName -match "Laptop" -or $deviceName -match "Mobile"
-        
-        # URL de l'API d'indexation officielle d'NVIDIA (Configurée pour GeForce, Windows 10/11 64-bit, Français, Game Ready WHQL)
-        # On utilise l'API de requêtes directes de production d'NVIDIA qui renvoie une structure JSON/Text stable.
-        $baseQuery = "https://gfe.nvidia.com/macshow" 
-        
-        # Génération d'une URL de recherche structurée et robuste via le serveur de téléchargement NVIDIA principal
-        # Cette API accepte les requêtes anonymes et liste les pilotes desktop/notebook grand public récents.
-        $lookupUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=121&pfid=963&osid=119&lid=2&whql=1&lang=fr"
-        if ($isNotebook) {
-            $lookupUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=121&pfid=965&osid=119&lid=2&whql=1&lang=fr"
-        }
+        # Téléchargement de l'outil autonome
+        Invoke-WebRequest -Uri $vrmUrl -OutFile $vrmExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
 
-        # Récupération de la page de résultat brute contenant le lien de l'exécutable
-        $htmlResult = Invoke-RestMethod -Uri $lookupUrl -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -ErrorAction Stop
-        
-        # Extraction de l'URL du fichier .exe via une expression régulière dans la réponse d'NVIDIA
-        $urlDownloader = $null
-        if ($htmlResult -match '(https:\/\/us\.download\.nvidia\.com\/Windows\/[^"''\s>]+\.exe)') {
-            $urlDownloader = $Matches[1]
-        }
+        if (Test-Path $vrmExe) {
+            Write-Host " -> Analyse des serveurs NVIDIA, t${e_aigu}l${e_aigu}chargement et installation..." -ForegroundColor Cyan
+            Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Sécurité additionnelle : Si l'extraction dynamique échoue, on applique la dernière version majeure stable connue
-        if (-not $urlDownloader) {
-            $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
-        }
+            # Lancement de l'outil avec les arguments de production :
+            # --install : installe le dernier pilote | --silent : mode silencieux sans GUI | --clean : installation propre
+            $vrmArgs = @("driver", "--install", "--silent", "--clean")
+            $process = Start-Process -FilePath $vrmExe -ArgumentList $vrmArgs -Wait -PassThru -NoNewWindow
 
-        if ($urlDownloader) {
-            Write-Host " -> T${e_aigu}l${e_aigu}chargement du package officiel..." -ForegroundColor Cyan
-            Invoke-WebRequest -Uri $urlDownloader -OutFile $driverSetupExe -UserAgent "Mozilla/5.0" -ErrorAction Stop
-            
-            if (Test-Path $driverSetupExe) {
-                $fileSize = (Get-Item $driverSetupExe).Length
-                if ($fileSize -gt 104857600) { # Doit faire plus de 100 Mo
-                    Write-Host " -> Installation du pilote graphique en cours..." -ForegroundColor Cyan
-                    Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-
-                    # Arguments d'installation silencieuse officiels de NVIDIA
-                    $installArgs = @("-s", "-noreboot", "-clean")
-                    $process = Start-Process -FilePath $driverSetupExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
-                    
-                    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                        Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} install${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
-                    } else {
-                        Write-Host " [Attention] L'installateur a retourné un code d'erreur : $($process.ExitCode)" -ForegroundColor Yellow
-                    }
-                } else {
-                    Write-Host " [Attention] Échec : Le package d'installation téléchargé est incomplet." -ForegroundColor Yellow
-                }
-                Remove-Item -Path $driverSetupExe -Force -ErrorAction SilentlyContinue
+            if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+                Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} trait${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
+            } else {
+                Write-Host " [Attention] L'outil de mise à jour a renvoyé une alerte : Code $($process.ExitCode)" -ForegroundColor Yellow
             }
+            
+            # Nettoyage
+            Remove-Item -Path $vrmExe -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host " [Attention] Impossible de localiser un lien de pilote valide." -ForegroundColor Yellow
+            Write-Host " [Attention] Impossible de récupérer le module de téléchargement universel." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host " [Attention] Erreur lors du traitement NVIDIA : $_" -ForegroundColor Yellow
-        if (Test-Path $driverSetupExe) { Remove-Item -Path $driverSetupExe -Force -ErrorAction SilentlyContinue }
+        Write-Host " [Attention] Erreur lors de la mise à jour automatique NVIDIA : $_" -ForegroundColor Yellow
+        if (Test-Path $vrmExe) { Remove-Item -Path $vrmExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
     Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
