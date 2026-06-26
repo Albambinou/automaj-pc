@@ -12,18 +12,22 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
+# CONFIGURATION GOOGLE DRIVE (LIENS DE TÉLÉCHARGEMENT DIRECTS PUBLICS)
+# -------------------------------------------------------------------------
+$urlActivation = "https://docs.google.com/uc?export=download&id=1Foqv3lwXMpgN_KB0djqD0cnVyIJmsv5g"
+$urlMasAio      = "https://docs.google.com/uc?export=download&id=12szspJHsBUIk62hqV6OgYODYSnpg2TIK"
+
+# -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR (COMPATIBLE GITHUB IRM / IEX)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    # On utilise des arguments séparés par des virgules pour éviter les conflits de guillemets
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command", "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex"
     )
     try {
-        # Lance le nouveau processus PowerShell en tant qu'admin avec la structure propre
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
     } catch {
         Clear-Host
@@ -98,7 +102,6 @@ $isNvidiaInstalled = (Test-Path $pathNvidiaApp) -or (Test-Path $pathGeForce)
 if (-not $isNvidiaInstalled) {
     Write-Host " -> [!] NVIDIA App n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
     
-    # Demande de confirmation avant d'installer
     $confirmationNvidia = Read-Host "Voulez-vous installer NVIDIA App et ses pilotes ? (Y/N)"
     if ($confirmationNvidia -match "^[yYoO]$") {
         Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel NVIDIA en cours..." -ForegroundColor Cyan
@@ -116,7 +119,7 @@ if (-not $isNvidiaInstalled) {
             if (Test-Path $pathNvidiaApp) {
                 Write-Host " -> NVIDIA App et le pilote graphique ont ${e_aigu}t${e_aigu} install${e_aigu}s avec succ${e_grave}s !" -ForegroundColor Green
             } else {
-                Write-Host " -> [Attention] L'installation a pris fin mais l'application est introuvable. Un red${e_aigu}marrage est peut-${e_circo}tre requis." -ForegroundColor Yellow
+                Write-Host " -> [Attention] L'installation a pris fin mais l'application est introuvable." -ForegroundColor Yellow
             }
         } catch {
             Write-Host " [ERREUR] Impossible de t${e_aigu}l${e_aigu}charger le fichier depuis les serveurs NVIDIA : $_" -ForegroundColor Red
@@ -126,22 +129,28 @@ if (-not $isNvidiaInstalled) {
     }
     
 } else {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Host " -> NVIDIA est pr${e_aigu}sent mais l'outil winget est manquant pour v${e_aigu}rifier les mises $a_grave jour du pilote." -ForegroundColor Yellow
+    # CORRECTIF : Trouver le chemin absolu de winget pour éviter le bug des Jobs PowerShell
+    $wingetPath = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+    if (-not $wingetPath) {
+        $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+    }
+
+    if (-not (Test-Path $wingetPath)) {
+        Write-Host " -> NVIDIA est pr${e_aigu}sent mais l'outil winget est introuvable pour v${e_aigu}rifier les pilotes." -ForegroundColor Yellow
     } else {
         Write-Host " -> NVIDIA APP est d${e_aigu}tect${e_aigu}. Recherche d'un nouveau pilote ou d'une mise $a_grave jour..." -ForegroundColor Cyan
         
-        # SÉCURITÉ TIMEOUT : Recherche winget cloisonnée à 30 secondes maximum
         $wingetJob = Start-Job -ScriptBlock {
-            winget source update --accept-source-agreements | Out-Null
-            return (winget upgrade --include-unknown 2>$null | Select-String "Nvidia")
-        }
+            param($exe)
+            & $exe source update --accept-source-agreements | Out-Null
+            return (& $exe upgrade --include-unknown 2>$null | Select-String "Nvidia","GeForce")
+        } -ArgumentList $wingetPath
         
-        $completedJob = Wait-Job $wingetJob -Timeout 30
+        $completedJob = Wait-Job $wingetJob -Timeout 35
         
         if ($null -eq $completedJob) {
             Remove-Job $wingetJob -Force
-            Write-Host " -> [Information] Recherche Winget trop longue (Serveurs Microsoft occup${e_aigu}s). Passage $a_grave la suite." -ForegroundColor Yellow
+            Write-Host " -> [Information] Recherche Winget trop longue. Passage $a_grave la suite." -ForegroundColor Yellow
             $nvidiaCheck = $null
         } else {
             $nvidiaCheck = Receive-Job $wingetJob
@@ -151,16 +160,16 @@ if (-not $isNvidiaInstalled) {
         if ($nvidiaCheck) {
             Write-Host " -> NOUVEAU PILOTE TROUV${e_aigu} !" -ForegroundColor Green
             Write-Host " -> T${e_aigu}l${e_aigu}chargement et mise $a_grave jour en cours..." -ForegroundColor Yellow
-            Write-Host " -> Votre ${e_aigu}cran peut clignoter une ou deux fois." -ForegroundColor DarkGray
             
             $installJob = Start-Job -ScriptBlock {
-                winget upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-                winget upgrade --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-            }
-            $completedInstall = Wait-Job $installJob -Timeout 120
+                param($exe)
+                & $exe upgrade --id Nvidia.NVIDIAApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+                & $exe upgrade --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            } -ArgumentList $wingetPath
+            $completedInstall = Wait-Job $installJob -Timeout 150
             Remove-Job $installJob -Force
 
-            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour ou v${e_aigu}rifi${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
+            Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
         } else {
             if ($null -ne $completedJob) {
                 Write-Host " -> Votre carte graphique et vos logiciels NVIDIA sont d${e_aigu}j$a_grave $a_grave jour." -ForegroundColor Green
@@ -197,25 +206,31 @@ if ($isOfficeInstalled) {
 }
 
 function Run-LocalActivationScript {
-    Write-Host " -> R${e_aigu}cup${e_aigu}ration du script d'activation depuis GitHub..." -ForegroundColor Cyan
-    $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/Activer_Office.cmd"
+    Write-Host " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis Google Drive..." -ForegroundColor Cyan
+    
     $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
+    $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
     
     try {
-        Invoke-WebRequest -Uri $urlActivation -OutFile $tempPathActivation -ErrorAction Stop
+        # Téléchargement via liens de redirection directe Google Drive (Sans clé API exposée)
+        Invoke-WebRequest -Uri $script:urlActivation -OutFile $tempPathActivation -ErrorAction Stop
+        Invoke-WebRequest -Uri $script:urlMasAio -OutFile $tempPathMasAio -ErrorAction Stop
+        
         Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
+        
         Remove-Item -Path $tempPathActivation -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $tempPathMasAio -Force -ErrorAction SilentlyContinue
+        
         Write-Host " -> Activation termin${e_aigu}e. Retour au script principal." -ForegroundColor Green
     } catch {
-        Write-Host " -> [Attention] Impossible de t${e_aigu}l${e_aigu}charger ou d'ex${e_aigu}cuter le script d'activation depuis GitHub." -ForegroundColor Yellow
+        Write-Host " -> [Attention] Impossible de r${e_aigu}cup${e_aigu}rer ou d'ex${e_aigu}cuter les fichiers d'activation depuis Google Drive." -ForegroundColor Yellow
     }
 }
 
 if (-not $isOfficeInstalled) {
     Write-Host " -> [!] Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
     
-    # Demande de confirmation avant d'installer
     $confirmationOffice = Read-Host "Voulez-vous installer la suite Microsoft Office 365 Pro ? (Y/N)"
     if ($confirmationOffice -match "^[yYoO]$") {
         Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office en cours..." -ForegroundColor Cyan
@@ -240,7 +255,6 @@ if (-not $isOfficeInstalled) {
             Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
             Write-Host " -> L'installation de Microsoft Office 365 est termin${e_aigu}e !" -ForegroundColor Green
             
-            # Demande avant d'activer
             $confirmationAct = Read-Host "Voulez-vous lancer l'activation d'Office maintenant ? (Y/N)"
             if ($confirmationAct -match "^[yYoO]$") {
                 Run-LocalActivationScript
@@ -258,7 +272,6 @@ if (-not $isOfficeInstalled) {
     if (-not $isOfficeActivated) {
         Write-Host " -> [Attention] Microsoft Office est pr${e_aigu}sent mais n'est pas activ${e_aigu} !" -ForegroundColor Red
         
-        # Demande de confirmation avant d'activer (si déjà installé mais non activé)
         $confirmationAct = Read-Host "Voulez-vous lancer le script d'activation d'Office ? (Y/N)"
         if ($confirmationAct -match "^[yYoO]$") {
             Run-LocalActivationScript
