@@ -16,12 +16,14 @@ $o_circo = "$([char]244)" # ô
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
+    # On utilise des arguments séparés par des virgules pour éviter les conflits de guillemets
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command", "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex"
     )
     try {
+        # Lance le nouveau processus PowerShell en tant qu'admin avec la structure propre
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
     } catch {
         Clear-Host
@@ -69,7 +71,6 @@ try {
         Write-Host " -> MISE $a_grave JOUR TROUV${e_aigu}E !" -ForegroundColor Green
         Write-Host " -> T${e_aigu}l${e_aigu}chargement et installation lanc${e_aigu}e..." -ForegroundColor Yellow
         
-        # Installation globale de toutes les mises à jour trouvées
         Get-WindowsUpdate -Install -AcceptAll -AutoReboot:$false -ErrorAction SilentlyContinue | Out-Null
         
         Write-Host " -> Mises $a_grave jour Windows install${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
@@ -89,35 +90,39 @@ Write-Host ""
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification des pilotes graphique..." -ForegroundColor Magenta
 
-# DÉTECTION PAR FICHIER
 $pathNvidiaApp = "C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe"
 $pathGeForce = "C:\Program Files\NVIDIA Corporation\GeForce Experience\LaunchGFExperience.exe"
 
 $isNvidiaInstalled = (Test-Path $pathNvidiaApp) -or (Test-Path $pathGeForce)
 
 if (-not $isNvidiaInstalled) {
-    Write-Host " -> NVIDIA App n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
-    Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel NVIDIA en cours..." -ForegroundColor Cyan
+    Write-Host " -> [!] NVIDIA App n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
     
-    $urlNvidia = "https://us.download.nvidia.com/nvapp/client/11.0.7.247/NVIDIA_app_v11.0.7.247.exe"
-    $tempPathNvidia = "$env:TEMP\NVIDIA_app_setup.exe"
-    
-    try {
-        Invoke-WebRequest -Uri $urlNvidia -OutFile $tempPathNvidia -ErrorAction Stop
+    # Demande de confirmation avant d'installer
+    $confirmationNvidia = Read-Host "Voulez-vous installer NVIDIA App et ses pilotes ? (Y/N)"
+    if ($confirmationNvidia -match "^[yYoO]$") {
+        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel NVIDIA en cours..." -ForegroundColor Cyan
+        $urlNvidia = "https://us.download.nvidia.com/nvapp/client/11.0.7.247/NVIDIA_app_v11.0.7.247.exe"
+        $tempPathNvidia = "$env:TEMP\NVIDIA_app_setup.exe"
         
-        Write-Host " -> Lancement de l'installation silencieuse..." -ForegroundColor Cyan
-        Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
-        
-        Start-Process -FilePath $tempPathNvidia -ArgumentList "/s" -Wait -NoNewWindow
-        Remove-Item -Path $tempPathNvidia -Force -ErrorAction SilentlyContinue
-        
-        if (Test-Path $pathNvidiaApp) {
-            Write-Host " -> NVIDIA App et le pilote graphique ont ${e_aigu}t${e_aigu} install${e_aigu}s avec succ${e_grave}s !" -ForegroundColor Green
-        } else {
-            Write-Host " -> [Attention] L'installation a pris fin mais l'application est introuvable. Un red${e_aigu}marrage est peut-${e_circo}tre requis." -ForegroundColor Yellow
+        try {
+            Invoke-WebRequest -Uri $urlNvidia -OutFile $tempPathNvidia -ErrorAction Stop
+            Write-Host " -> Lancement de l'installation silencieuse..." -ForegroundColor Cyan
+            Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
+            
+            Start-Process -FilePath $tempPathNvidia -ArgumentList "/s" -Wait -NoNewWindow
+            Remove-Item -Path $tempPathNvidia -Force -ErrorAction SilentlyContinue
+            
+            if (Test-Path $pathNvidiaApp) {
+                Write-Host " -> NVIDIA App et le pilote graphique ont ${e_aigu}t${e_aigu} install${e_aigu}s avec succ${e_grave}s !" -ForegroundColor Green
+            } else {
+                Write-Host " -> [Attention] L'installation a pris fin mais l'application est introuvable. Un red${e_aigu}marrage est peut-${e_circo}tre requis." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host " [ERREUR] Impossible de t${e_aigu}l${e_aigu}charger le fichier depuis les serveurs NVIDIA : $_" -ForegroundColor Red
         }
-    } catch {
-        Write-Host " [ERREUR] Impossible de t${e_aigu}l${e_aigu}charger le fichier depuis les serveurs NVIDIA : $_" -ForegroundColor Red
+    } else {
+        Write-Host " -> Étape NVIDIA ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
     }
     
 } else {
@@ -126,13 +131,12 @@ if (-not $isNvidiaInstalled) {
     } else {
         Write-Host " -> NVIDIA APP est d${e_aigu}tect${e_aigu}. Recherche d'un nouveau pilote ou d'une mise $a_grave jour..." -ForegroundColor Cyan
         
-        # SÉCURITÉ TIMEOUT : On lance la détection winget dans un Job en arrière-plan
+        # SÉCURITÉ TIMEOUT : Recherche winget cloisonnée à 30 secondes maximum
         $wingetJob = Start-Job -ScriptBlock {
             winget source update --accept-source-agreements | Out-Null
             return (winget upgrade --include-unknown 2>$null | Select-String "Nvidia")
         }
         
-        # On attend la fin du job pendant 30 secondes MAXIMUM
         $completedJob = Wait-Job $wingetJob -Timeout 30
         
         if ($null -eq $completedJob) {
@@ -194,7 +198,6 @@ if ($isOfficeInstalled) {
 
 function Run-LocalActivationScript {
     Write-Host " -> R${e_aigu}cup${e_aigu}ration du script d'activation depuis GitHub..." -ForegroundColor Cyan
-    
     $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/Activer_Office.cmd"
     $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
     
@@ -210,42 +213,56 @@ function Run-LocalActivationScript {
 }
 
 if (-not $isOfficeInstalled) {
-    Write-Host " -> Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
-    Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office en cours..." -ForegroundColor Cyan
+    Write-Host " -> [!] Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
     
-    $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
-    $tempPathOffice = "$env:TEMP\Office365_setup.exe"
-    
-    try {
-        Invoke-WebRequest -Uri $urlOffice -OutFile $tempPathOffice -ErrorAction Stop
+    # Demande de confirmation avant d'installer
+    $confirmationOffice = Read-Host "Voulez-vous installer la suite Microsoft Office 365 Pro ? (Y/N)"
+    if ($confirmationOffice -match "^[yYoO]$") {
+        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office en cours..." -ForegroundColor Cyan
+        $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
+        $tempPathOffice = "$env:TEMP\Office365_setup.exe"
         
-        Write-Host " -> Lancement de l'installation d'Office 365..." -ForegroundColor Cyan
-        Write-Host " -> Suivez la progression dans la fen${e_circo}tre d'installation Orange." -ForegroundColor Cyan
-        
-        Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
-        Start-Sleep -Seconds 15
-        
-        while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) {
-            Write-Host "." -NoNewline -ForegroundColor Yellow
-            Start-Sleep -Seconds 10
+        try {
+            Invoke-WebRequest -Uri $urlOffice -OutFile $tempPathOffice -ErrorAction Stop
+            Write-Host " -> Lancement de l'installation d'Office 365..." -ForegroundColor Cyan
+            Write-Host " -> Suivez la progression dans la fen${e_circo}tre d'installation Orange." -ForegroundColor Cyan
+            
+            Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
+            Start-Sleep -Seconds 15
+            
+            while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) {
+                Write-Host "." -NoNewline -ForegroundColor Yellow
+                Start-Sleep -Seconds 10
+            }
+            Write-Host ""
+            
+            Start-Sleep -Seconds 5
+            Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
+            Write-Host " -> L'installation de Microsoft Office 365 est termin${e_aigu}e !" -ForegroundColor Green
+            
+            # Demande avant d'activer
+            $confirmationAct = Read-Host "Voulez-vous lancer l'activation d'Office maintenant ? (Y/N)"
+            if ($confirmationAct -match "^[yYoO]$") {
+                Run-LocalActivationScript
+            }
+            
+        } catch {
+            Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
         }
-        Write-Host ""
-        
-        Start-Sleep -Seconds 5
-        Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
-        Write-Host " -> L'installation de Microsoft Office 365 est termin${e_aigu}e !" -ForegroundColor Green
-        
-        Run-LocalActivationScript
-        
-    } catch {
-        Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
+    } else {
+        Write-Host " -> Étape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
     }
 } else {
     Write-Host " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." -ForegroundColor Green
     
     if (-not $isOfficeActivated) {
         Write-Host " -> [Attention] Microsoft Office est pr${e_aigu}sent mais n'est pas activ${e_aigu} !" -ForegroundColor Red
-        Run-LocalActivationScript
+        
+        # Demande de confirmation avant d'activer (si déjà installé mais non activé)
+        $confirmationAct = Read-Host "Voulez-vous lancer le script d'activation d'Office ? (Y/N)"
+        if ($confirmationAct -match "^[yYoO]$") {
+            Run-LocalActivationScript
+        }
     } else {
         Write-Host " -> Licence Microsoft Office valide et activ${e_aigu}e." -ForegroundColor Green
         Write-Host " -> Recherche et application des mises $a_grave jour Office en cours..." -ForegroundColor Cyan
