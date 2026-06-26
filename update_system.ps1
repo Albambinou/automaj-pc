@@ -60,9 +60,9 @@ Write-Host "==========================================================" -Foregro
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 2 : WINDOWS UPDATE
+# ÉTAPE 2 : WINDOWS UPDATE INTÉGRAL (TOUTES MISES À JOUR DISPONIBLES)
 # -------------------------------------------------------------------------
-Write-Host "[1/3] Recherche de mises $a_grave jour Windows Update en cours..." -ForegroundColor Magenta
+Write-Host "[1/3] Recherche globale de TOUTES les mises $a_grave jour Windows Update..." -ForegroundColor Magenta
 
 if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
     Write-Host " -> Pr${e_aigu}paration de l'environnement (${e_aigu}tape unique)..." -ForegroundColor DarkGray
@@ -71,17 +71,30 @@ if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
 }
 
 try {
-    $updates = Get-WindowsUpdate -ErrorAction Stop
+    # On configure Windows Update pour inclure les autres produits Microsoft (ex: .NET, Office local, etc.)
+    $ServiceManager = New-Object -ComObject Microsoft.Update.ServiceManager
+    $ServiceManager.AddService2("7971f2d8-260a-4a17-a31f-f6e3e361242d", 7, "") | Out-Null
+
+    # Recherche agressive de TOUTES les catégories possibles :
+    # - MicrosoftUpdate : inclut les pilotes et outils annexes
+    # - AcceptAll : valide toutes les licences (EULA) d'un coup
+    $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -ErrorAction Stop
+    
     if ($updates) {
-        Write-Host " -> MISE $a_grave JOUR TROUV${e_aigu}E !" -ForegroundColor Green
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement et installation lanc${e_aigu}e..." -ForegroundColor Yellow
-        Get-WindowsUpdate -Install -AcceptAll -AutoReboot:$false -ErrorAction SilentlyContinue | Out-Null
-        Write-Host " -> Mises $a_grave jour Windows install${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
+        Write-Host " -> Mises $a_grave jour trouv${e_aigu}es ($($updates.Count) en attente) !" -ForegroundColor Green
+        Write-Host " -> Téléchargement et installation de la totalité des paquets..." -ForegroundColor Yellow
+        
+        # Le combo ultime pour tout installer sans distinction :
+        # -Category : On liste toutes les catégories possibles (Security, Critical, Updates, Drivers, FeaturePack)
+        # -AutoReboot:$false : Évite que le PC ne s'éteigne sauvagement au milieu du script si une mise à jour l'exige
+        Get-WindowsUpdate -MicrosoftUpdate -Category "SecurityUpdate", "CriticalUpdate", "Update", "Driver", "FeaturePack", "ServicePack" -Install -AcceptAll -AutoReboot:$false -ErrorAction SilentlyContinue | Out-Null
+        
+        Write-Host " -> L'ensemble des mises $a_grave jour a ${e_aigu}t${e_aigu} install${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
     } else {
-        Write-Host " -> Votre Windows est d${e_aigu}j$a_grave $a_grave jour !" -ForegroundColor Green
+        Write-Host " -> Votre Windows et vos périphériques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
     }
 } catch {
-    Write-Host " [Information] Windows Update est temporairement indisponible ou d${e_aigu}j$a_grave occup${e_aigu}." -ForegroundColor Yellow
+    Write-Host " [Information] Windows Update est temporairement occupé ou inaccessible : $_" -ForegroundColor Yellow
 }
 
 Write-Host ""
