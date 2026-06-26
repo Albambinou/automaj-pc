@@ -15,20 +15,17 @@ $e_circo = "$([char]234)" # ê
 $o_circo = "$([char]244)" # ô
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR INDÉSTRUCTIBLE (100% AUTOMATIQUE)
+# AUTO-ÉLÉVATION EN MODE ADMINISTRATEUR STABLE ET FIXE (SANS REPRISE DE LIGNE)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $MyCommand = if ($MyInvocation.Line) { $MyInvocation.Line } else { "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1' | iex" }
-    
-    if ($MyCommand -notmatch "Cache-Control") {
-        $MyCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
-    }
+    # On force une commande propre, sans jamais lire le contenu de ton terminal ou de ton presse-papier
+    $FixedCommand = "irm 'https://raw.githubusercontent.com/Albambinou/automaj-pc/main/update_system.ps1?$(Get-Random)' -Headers @{'Cache-Control'='no-cache'} | iex"
 
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-Command", $MyCommand
+        "-Command", $FixedCommand
     )
     try {
         Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
@@ -93,7 +90,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (CORRIGÉ AVEC CURL.EXE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (AVEC CURL.EXE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -108,8 +105,7 @@ if ($hasNvidiaGPU) {
     $urlDownloader = "https://github.com/Aetf/NVIDIA-Driver-Downloader/releases/download/v2.4.0/nvidia-driver-downloader.exe"
 
     try {
-        # CORRECTIF RADICAL : On contourne .NET et on utilise l'outil natif curl.exe de Windows
-        # -L gère les redirections de GitHub, -s cache la barre de progression brute, -A simule un navigateur
+        # Téléchargement via l'utilitaire natif curl de Windows
         $curlArgs = @("-L", "-s", "-A", "Mozilla/5.0", $urlDownloader, "-o", $downloaderExe)
         Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
         
@@ -117,7 +113,7 @@ if ($hasNvidiaGPU) {
             Write-Host " -> Analyse, t${e_aigu}l${e_aigu}chargement et installation du pilote en cours..." -ForegroundColor Cyan
             Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-            # Exécution silencieuse (Type G = Game Ready)
+            # Exécution silencieuse (Type G = Game Ready) avec l'outil officiel de Beyazit Yilmaz
             & $downloaderExe --type g --silent --clean | Out-Null
             
             # Nettoyage de l'exécutable temporaire
@@ -131,7 +127,7 @@ if ($hasNvidiaGPU) {
         if (Test-Path $downloaderExe) { Remove-Item -Path $downloaderExe -Force -ErrorAction SilentlyContinue }
     }
 } else {
-    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -ForegroundColor DarkGray
+    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e sur cet appareil." -Workspace DarkGray
 }
 
 Write-Host ""
@@ -171,7 +167,6 @@ function Run-LocalActivationScript {
     $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
     
     try {
-        # Utilisation de curl ici aussi pour blinder la stabilité
         Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlActivation, "-o", $tempPathActivation -Wait -NoNewWindow
         Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlMasAio, "-o", $tempPathMasAio -Wait -NoNewWindow
         
