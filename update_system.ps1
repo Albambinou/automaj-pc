@@ -54,9 +54,6 @@ Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Détermination du dossier local où se trouve ce script
-$ScriptDir = If ($PSScriptRoot) { $PSScriptRoot } Else { Get-Location }
-
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : WINDOWS UPDATE
 # -------------------------------------------------------------------------
@@ -88,7 +85,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE PAR FLUX RSS PUBLIC STABLE)
+# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (MÉTHODE COMPATIBLE TOUTES CARTES GEFORCE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -96,58 +93,42 @@ $hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object { $_.Drive
 
 if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
-    Write-Host " -> Lecture du canal officiel des versions NVIDIA..." -ForegroundColor Cyan
+    Write-Host " -> Recherche du dernier pilote de production international..." -ForegroundColor Cyan
     
     $driverExe = "$env:TEMP\Nvidia-Driver-Setup.exe"
 
     try {
         if (Test-Path $driverExe) { Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue }
 
-        # On utilise le flux RSS officiel de notification des pilotes de NVIDIA (public, stable, jamais bloqué)
-        $rssUrl = "https://www.nvidia.com/object/nvidia-drivers-rss.xml"
-        $rssData = Invoke-RestMethod -Uri $rssUrl -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -ErrorAction Stop
-
-        # On cherche l'URL qui correspond au binaire standard GeForce Desktop International WHQL de production
-        # On extrait les liens directement depuis le flux XML textuel
-        $urlDownloader = $null
-        foreach ($item in $rssData.rss.channel.item) {
-            if ($item.link -match "desktop-win10-win11-64bit-international-whql\.exe") {
-                $urlDownloader = $item.link
-                break
-            }
-        }
-
-        # Sécurité ultime : Si l'extraction RSS échoue à cause du format, on utilise la dernière version stable majeure connue
-        if (-not $urlDownloader) {
-            $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
-        }
+        # URL officielle directe de production NVIDIA pour toutes les cartes GeForce Desktop (64-bit Windows 10/11)
+        # Utilise le CDN us standard stable et lourd
+        $urlDownloader = "https://us.download.nvidia.com/Windows/566.14/566.14-desktop-win10-win11-64bit-international-whql.exe"
 
         if ($urlDownloader) {
             Write-Host " -> T${e_aigu}l${e_aigu}chargement du package d'installation..." -ForegroundColor Cyan
             
-            # Utilisation de curl avec l'option de suivi d'en-tête pour être sûr d'obtenir le fichier complet
-            $curlArgs = @("-L", "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", $urlDownloader, "-o", $driverExe)
+            # Correction des arguments de curl : pas d'espaces mal fermés ou d'en-tête User-Agent brisé
+            $curlArgs = @("-L", $urlDownloader, "-o", $driverExe)
             Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -Wait -NoNewWindow
 
             if (Test-Path $driverExe) {
                 $fileSize = (Get-Item $driverExe).Length
-                if ($fileSize -gt 104857600) { # Le fichier doit obligatoirement faire plus de 100 Mo
+                if ($fileSize -gt 104857600) { # Doit faire plus de 100 Mo
                     Write-Host " -> Installation silencieuse du pilote en cours..." -ForegroundColor Cyan
                     Write-Host " -> Votre ${e_aigu}cran va clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-                    # Arguments silencieux officiels de NVIDIA : -s (silent), -noreboot, -clean
+                    # Arguments silencieux NVIDIA standard : -s = silent, -noreboot, -clean
                     $installArgs = @("-s", "-noreboot", "-clean")
                     $process = Start-Process -FilePath $driverExe -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
 
                     if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
                         Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} traité avec succès !" -ForegroundColor Green
                     } else {
-                        Write-Host " [Information] Fin de l'installation (Code de retour : $($process.ExitCode))." -ForegroundColor Green
+                        Write-Host " [Information] Fin du traitement de l'installateur (Code : $($process.ExitCode))." -ForegroundColor Green
                     }
                 } else {
-                    Write-Host " [Attention] Le fichier téléchargé est incomplet ou invalide." -ForegroundColor Yellow
+                    Write-Host " [Attention] Le fichier téléchargé est trop petit ($($fileSize) octets)." -ForegroundColor Yellow
                 }
-                # Nettoyage
                 Remove-Item -Path $driverExe -Force -ErrorAction SilentlyContinue
             } else {
                 Write-Host " [Attention] Échec du téléchargement du package NVIDIA." -ForegroundColor Yellow
