@@ -60,7 +60,7 @@ Write-Host "==========================================================" -Foregro
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 2 : WINDOWS UPDATE INTÉGRAL (TOUTES MISES À JOUR DISPONIBLES)
+# ÉTAPE 1 : WINDOWS UPDATE INTÉGRAL (TOUTES CATEGORIES)
 # -------------------------------------------------------------------------
 Write-Host "[1/3] Recherche globale de TOUTES les mises $a_grave jour Windows Update..." -ForegroundColor Magenta
 
@@ -71,30 +71,23 @@ if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
 }
 
 try {
-    # On configure Windows Update pour inclure les autres produits Microsoft (ex: .NET, Office local, etc.)
     $ServiceManager = New-Object -ComObject Microsoft.Update.ServiceManager
     $ServiceManager.AddService2("7971f2d8-260a-4a17-a31f-f6e3e361242d", 7, "") | Out-Null
 
-    # Recherche agressive de TOUTES les catégories possibles :
-    # - MicrosoftUpdate : inclut les pilotes et outils annexes
-    # - AcceptAll : valide toutes les licences (EULA) d'un coup
     $updates = Get-WindowsUpdate -MicrosoftUpdate -AcceptAll -ErrorAction Stop
     
     if ($updates) {
         Write-Host " -> Mises $a_grave jour trouv${e_aigu}es ($($updates.Count) en attente) !" -ForegroundColor Green
-        Write-Host " -> Téléchargement et installation de la totalité des paquets..." -ForegroundColor Yellow
+        Write-Host " -> T${e_aigu}l${e_aigu}chargement et installation de la totalit${e_aigu} des paquets..." -ForegroundColor Yellow
         
-        # Le combo ultime pour tout installer sans distinction :
-        # -Category : On liste toutes les catégories possibles (Security, Critical, Updates, Drivers, FeaturePack)
-        # -AutoReboot:$false : Évite que le PC ne s'éteigne sauvagement au milieu du script si une mise à jour l'exige
         Get-WindowsUpdate -MicrosoftUpdate -Category "SecurityUpdate", "CriticalUpdate", "Update", "Driver", "FeaturePack", "ServicePack" -Install -AcceptAll -AutoReboot:$false -ErrorAction SilentlyContinue | Out-Null
         
         Write-Host " -> L'ensemble des mises $a_grave jour a ${e_aigu}t${e_aigu} install${e_aigu} avec succ${e_grave}s !" -ForegroundColor Green
     } else {
-        Write-Host " -> Votre Windows et vos périphériques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
+        Write-Host " -> Votre Windows et vos p${e_aigu}riph${e_aigu}riques sont d${e_aigu}j$a_grave 100% $a_grave jour !" -ForegroundColor Green
     }
 } catch {
-    Write-Host " [Information] Windows Update est temporairement occupé ou inaccessible : $_" -ForegroundColor Yellow
+    Write-Host " [Information] Windows Update est temporairement occup${e_aigu} ou inaccessible." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -102,7 +95,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA (NETTOYÉ ET TOTALEMENT SILENCIEUX)
+# ÉTAPE 2 : PILOTE GRAPHIQUE NVIDIA (VIA CHOCOLATEY AUTOMATIQUE)
 # -------------------------------------------------------------------------
 Write-Host "[2/3] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
 
@@ -112,7 +105,6 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     
     try {
-        # Installation ultra-silencieuse de Chocolatey (Sorties standard, erreurs et warnings redirigées vers Out-Null)
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Write-Host " -> Configuration du gestionnaire de pilotes s${e_aigu}curis${e_aigu}..." -ForegroundColor Cyan
             $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
@@ -123,7 +115,6 @@ if ($hasNvidiaGPU) {
         Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
         Write-Host " -> Votre ${e_aigu}cran peut clignoter, c'est tout $a_grave fait normal." -ForegroundColor DarkGray
 
-        # Exécution de choco upgrade 100% masquée sans pollution visuelle
         choco upgrade nvidia-display-driver -y --no-progress -r 2>$null | Out-Null
 
         Write-Host " -> Le pilote NVIDIA a ${e_aigu}t${e_aigu} v${e_aigu}rifi${e_aigu} ou mis $a_grave jour avec succ${e_grave}s !" -ForegroundColor Green
@@ -139,7 +130,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365
+# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365 (INSTALLATION, ACTIVATION & MAJ)
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
@@ -147,17 +138,29 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
-    $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
-    $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
+    $vbsPaths = @(
+        "C:\Program Files\Microsoft Office\Office16\ospp.vbs",
+        "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs",
+        "C:\Program Files\Microsoft Office\Office15\ospp.vbs"
+    )
+    
+    $targetVbs = $null
+    foreach ($path in $vbsPaths) {
+        if (Test-Path $path) { $targetVbs = $path; break }
+    }
 
-    if (Test-Path $targetVbs) {
-        $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null
-        if ($licenceStatus -match "LICENSE STATUS:\s+---LICENSED---") {
+    if (-not $targetVbs) {
+        $targetVbs = Get-ChildItem -Path "C:\Program Files\Microsoft Office", "C:\Program Files (x86)\Microsoft Office" -Filter "ospp.vbs" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    }
+
+    if ($targetVbs -and (Test-Path $targetVbs)) {
+        $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
+        if ($licenceStatus -match "LICENSE STATUS:\s+---LICENSED---" -or $licenceStatus -match "LICENSED") {
             $isOfficeActivated = $true
         }
     } else {
-        $isOfficeActivated = $true
+        $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\16.0\Common\Licensing" -ErrorAction SilentlyContinue
+        if ($regCheck) { $isOfficeActivated = $true }
     }
 }
 
@@ -171,13 +174,19 @@ function Run-LocalActivationScript {
     try {
         Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlActivation, "-o", $tempPathActivation -Wait -NoNewWindow
         Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlMasAio, "-o", $tempPathMasAio -Wait -NoNewWindow
-        Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
-        Remove-Item -Path $tempPathActivation -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $tempPathMasAio -Force -ErrorAction SilentlyContinue
-        Write-Host " -> Activation termin${e_aigu}e. Retour au script principal." -ForegroundColor Green
+        
+        if (Test-Path $tempPathActivation) {
+            Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
+            Write-Host " -> Activation termin${e_aigu}e. Retour au script principal." -ForegroundColor Green
+        } else {
+            Write-Host " -> [Attention] Fichier d'activation introuvable après téléchargement." -ForegroundColor Yellow
+        }
     } catch {
-        Write-Host " -> [Attention] Impossible de r${e_aigu}cup${e_aigu}rer ou d'ex${e_aigu}cuter les fichiers d'activation depuis GitHub." -ForegroundColor Yellow
+        Write-Host " -> [Attention] Impossible de joindre GitHub pour l'activation." -ForegroundColor Yellow
+    } finally {
+        if (Test-Path $tempPathActivation) { Remove-Item -Path $tempPathActivation -Force }
+        if (Test-Path $tempPathMasAio) { Remove-Item -Path $tempPathMasAio -Force }
     }
 }
 
@@ -185,29 +194,35 @@ if (-not $isOfficeInstalled) {
     Write-Host " -> [!] Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
     $confirmationOffice = Read-Host "Voulez-vous installer la suite Microsoft Office 365 Pro ? (Y/N)"
     if ($confirmationOffice -match "^[yYoO]$") {
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office en cours..." -ForegroundColor Cyan
+        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office..." -ForegroundColor Cyan
         $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
         $tempPathOffice = "$env:TEMP\Office365_setup.exe"
         try {
             Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlOffice, "-o", $tempPathOffice -Wait -NoNewWindow
             Write-Host " -> Lancement de l'installation d'Office 365..." -ForegroundColor Cyan
             Write-Host " -> Suivez la progression dans la fen${e_circo}tre d'installation Orange." -ForegroundColor Cyan
+            
             Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
             Start-Sleep -Seconds 15
+            
             while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) {
                 Write-Host "." -NoNewline -ForegroundColor Yellow
                 Start-Sleep -Seconds 10
             }
             Write-Host ""
-            Start-Sleep -Seconds 5
+            
             Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
             Write-Host " -> L'installation de Microsoft Office 365 est termin${e_aigu}e !" -ForegroundColor Green
+            
             $confirmationAct = Read-Host "Voulez-vous lancer l'activation d'Office maintenant ? (Y/N)"
             if ($confirmationAct -match "^[yYoO]$") { Run-LocalActivationScript }
         } catch {
             Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
         }
     } else {
+        Write-Host " -> Étape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
+    }
+} else {
     Write-Host " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." -ForegroundColor Green
     
     if (-not $isOfficeActivated) {
@@ -220,14 +235,8 @@ if (-not $isOfficeInstalled) {
         
         $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
         if (Test-Path $pathC2R) {
-            # CORRECTIF DE LA MISE À JOUR D'OFFICE :
-            # 1. On réactive le mécanisme de mise à jour s'il était désactivé
             Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -Wait -NoNewWindow
-            
-            # 2. On lance la mise à jour silencieuse vers la TOUTE DERNIÈRE version disponible sur les serveurs Microsoft
-            # forceappshutdown=true permet d'appliquer la mise à jour même si un document Word est resté ouvert en arrière-plan
             Start-Process -FilePath $pathC2R -ArgumentList "/update user displaylevel=false forceappshutdown=true" -Wait -NoNewWindow
-            
             Write-Host " -> Mises $a_grave jour Office trait${e_aigu}es avec succ${e_grave}s." -ForegroundColor Green
         } else {
             Write-Host " -> [Attention] L'ex${e_aigu}cutable de mise $a_grave jour Office ClickToRun est introuvable." -ForegroundColor Yellow
