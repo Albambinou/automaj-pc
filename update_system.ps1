@@ -95,6 +95,9 @@ if ($hasNvidiaGPU) {
     Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
     Write-Host " -> Recherche du tout dernier pilote officiel chez NVIDIA..." -ForegroundColor Cyan
     
+    # CORRECTIF: On force l'utilisation du protocole TLS 1.2 pour éviter les coupures réseau inattendues
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    
     $downloaderExe = "$env:TEMP\NVDownloader.exe"
     $urlDownloader = "https://github.com/Bettehem/NVIDIA-Driver-Downloader/releases/download/v2.1.0/nvidia-driver-downloader.exe"
 
@@ -133,7 +136,7 @@ $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft
 $isOfficeActivated = $false
 if ($isOfficeInstalled) {
     $vbsPath64 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
-    $vbsPath32 = "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs"
+    $vbsPath32 = "C:\Program Files\Microsoft Office\Office16\ospp.vbs"
     $targetVbs = if (Test-Path $vbsPath64) { $vbsPath64 } else { $vbsPath32 }
 
     if (Test-Path $targetVbs) {
@@ -149,7 +152,6 @@ if ($isOfficeInstalled) {
 function Run-LocalActivationScript {
     Write-Host " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis GitHub..." -ForegroundColor Cyan
     
-    # Retour aux liens de téléchargement directs et publics de GitHub
     $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
     $urlMasAio      = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/MAS_AIO.cmd"
     
