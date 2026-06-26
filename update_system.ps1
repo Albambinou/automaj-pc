@@ -53,7 +53,7 @@ Write-Host "==========================================================" -Foregro
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE (SANS CRASH API)
+# ÉTAPE 1 : WINDOWS UPDATE
 # -------------------------------------------------------------------------
 Write-Host "[1/3] Traque et installation de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
 
@@ -83,7 +83,7 @@ try {
     Write-Host " -> [Information] L'installation standard est g${e_aigu}r${e_aigu}e par l'OS en arri${e_grave}re-plan." -ForegroundColor DarkGray
 }
 
-# 4. Forçage des préversions via l'Orchestrateur natif (Imparable)
+# 4. Forçage des préversions via l'Orchestrateur natif
 Write-Host " -> D${e_aigu}clenchement de l'Orchestrateur USO pour aspirer les pr${e_aigu}versions..." -ForegroundColor Yellow
 Start-Process -FilePath "usoclient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow
 Write-Host " -> Le syst${e_grave}me a re$($c_cedi)u l'ordre d'absorber toutes les pr${e_aigu}versions !" -ForegroundColor Green
@@ -125,7 +125,7 @@ Write-Host "----------------------------------------------------------"
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365 (DÉTECTION D'ACTIVATION SÉCURISÉE)
+# ÉTAPE 3 : SUITE MICROSOFT OFFICE 365
 # -------------------------------------------------------------------------
 Write-Host "[3/3] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
 
@@ -151,7 +151,7 @@ if ($isOfficeInstalled) {
     if ($targetVbs -and (Test-Path $targetVbs)) {
         $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
         
-        # CORRECTIF DÉTECTION : On regarde si la licence est active OU si un jeton d'abonnement 365 valide est présent
+        # CORRECTIF DÉTECTION
         if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
             $isOfficeActivated = $true
         }
