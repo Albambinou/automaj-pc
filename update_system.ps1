@@ -14,6 +14,39 @@ $maj_e_aigu  = "$([char]201)" # É
 $maj_a_grave = "$([char]192)" # À
 
 # -------------------------------------------------------------------------
+# CONFIGURATION DE LA CONSOLE (FOND NOIR & POLICE CONSOLAS)
+# -------------------------------------------------------------------------
+# Force le fond en noir et le texte en blanc
+$Host.UI.RawUI.BackgroundColor = "Black"
+$Host.UI.RawUI.ForegroundColor = "White"
+
+# Code magique pour forcer la police "Consolas" (taille 16) via l'API Windows
+$Definition = @"
+using System;
+using System.Runtime.InteropServices;
+public class WinConsole {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct CONSOLE_FONT_INFO_EX {
+        public int cbSize; public int nFont; public short dwFontSizeX; public short dwFontSizeY;
+        public int FontFamily; public int FontWeight;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FaceName;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool SetCurrentConsoleFontEx(IntPtr hConsoleOutput, bool bMaximumWindow, ref CONSOLE_FONT_INFO_EX lpConsoleCurrentFontEx);
+}
+"@
+Add-Type -TypeDefinition $Definition -ErrorAction SilentlyContinue
+$hOutput = [System.Diagnostics.Process]::GetCurrentProcess().StandardOutput.Handle
+$fontInfo = New-Object WinConsole+CONSOLE_FONT_INFO_EX
+$fontInfo.cbSize = [MarshalAs]::SizeOf($fontInfo)
+$fontInfo.FaceName = "Consolas" # <--- Tu peux changer par "Lucida Console" ou "Cascadia Mono"
+$fontInfo.dwFontSizeY = 16       # <--- Taille de la police
+[WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
+
+# Applique le nettoyage de l'écran pour injecter le fond noir partout immédiatement
+Clear-Host
+
+# -------------------------------------------------------------------------
 # AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -49,7 +82,7 @@ $host.UI.RawUI.WindowSize = $windowSize
 # -------------------------------------------------------------------------
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    ASSISTANT DE MISE $maj_a_grave JOUR EXTR${e_circo}ME DE VOTRE PC    " -ForegroundColor Cyan
+Write-Host "    ASSISTANT DE MISE $maj_a_grave JOUR DE VOTRE PC    " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Ce script va forcer l'installation de TOUT ce qui est"
 Write-Host " disponible (Standard, Pilotes, Pr${e_aigu}versions)."
@@ -91,10 +124,10 @@ Write-Host ""
 # -------------------------------------------------------------------------
 # ÉTAPE 1 : WINDOWS UPDATE & MICROSOFT STORE
 # -------------------------------------------------------------------------
-Write-Host "[1/3] Traque et installation de TOUTES les mises $a_grave jour..." -ForegroundColor Magenta
+Write-Host "[1/3] Recherche et installation de toutes les mises $a_grave jour..." -ForegroundColor Magenta
 
 # 1. Option "Continuous Innovation" (Recevoir les MAJ dès que possible, préversions incluses)
-Write-Host " -> For$($c_cedi)age de l'option 'Recevoir les derni${e_grave}res MAJ d${e_grave}s qu'elles sont disponibles'..." -ForegroundColor DarkGray
+Write-Host " -> Activation de l'option 'Recevoir les derni${e_grave}res MAJ d${e_grave}s qu'elles sont disponibles'..." -ForegroundColor DarkGray
 $regPathUX = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
 if (-not (Test-Path $regPathUX)) { New-Item -Path $regPathUX -Force | Out-Null }
 Set-ItemProperty -Path $regPathUX -Name "IsContinuousInnovationOptedIn" -Value 1 -Type DWord -ErrorAction SilentlyContinue
@@ -112,7 +145,7 @@ if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
 Import-Module PSWindowsUpdate -Force
 
 try {
-    Write-Host " -> Analyse et traitement des MAJ standards et pilotes..." -ForegroundColor Cyan
+    Write-Host " -> Analyse et traitement des mise à jour standards et pilotes..." -ForegroundColor Cyan
     Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop | Out-Null
     Write-Host " -> Mises $a_grave jour standards appliqu${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
 } catch {
@@ -152,7 +185,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
     }
 
     if ($apps.Count -eq 0) {
-        Write-Host " -> Toutes les applications logicielles et Store sont d${e_aigu}j$a_grave $a_grave jour !" -ForegroundColor Green
+        Write-Host " -> Toutes les applications logicielles sont d${e_aigu}j$a_grave $a_grave jour !" -ForegroundColor Green
     } else {
         $choosing = $true
         Write-Host ""
@@ -392,7 +425,7 @@ if (-not $isOfficeInstalled) {
 # -------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    TOUTES LES MISES $maj_a_grave JOUR SONT TERMIN${maj_e_aigu}ES ! MERCI.   " -ForegroundColor Green
+Write-Host "    TOUTES LES MISES $maj_a_grave JOUR SONT TERMIN${maj_e_aigu}ES !   " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 Read-Host "Vous pouvez fermer cette fen${e_circo}tre en appuyant sur Entr${e_aigu}e..."
