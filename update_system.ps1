@@ -235,6 +235,10 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Host " -> [Attention] L'outil 'winget' est introuvable. ${maj_e_aigu}tape saut${e_aigu}e." -ForegroundColor Yellow
 }
 
+Write-Host ""
+Write-Host "----------------------------------------------------------"
+Write-Host ""
+
 # -------------------------------------------------------------------------
 # ÉTAPE 2 : PILOTE GRAPHIQUE NVIDIA
 # -------------------------------------------------------------------------
