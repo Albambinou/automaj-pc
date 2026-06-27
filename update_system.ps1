@@ -20,7 +20,7 @@ $maj_a_grave = "$([char]192)" # À
 $Host.UI.RawUI.BackgroundColor = "Black"
 $Host.UI.RawUI.ForegroundColor = "White"
 
-# Code magique pour forcer la police "Consolas" (taille 16) via l'API Windows
+# Code de définition pour forcer la police "Consolas" via l'API Windows
 $Definition = @"
 using System;
 using System.Runtime.InteropServices;
@@ -33,17 +33,30 @@ public class WinConsole {
     }
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool SetCurrentConsoleFontEx(IntPtr hConsoleOutput, bool bMaximumWindow, ref CONSOLE_FONT_INFO_EX lpConsoleCurrentFontEx);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr GetStdHandle(int nStdHandle);
 }
 "@
 Add-Type -TypeDefinition $Definition -ErrorAction SilentlyContinue
-$hOutput = [System.Diagnostics.Process]::GetCurrentProcess().StandardOutput.Handle
-$fontInfo = New-Object WinConsole+CONSOLE_FONT_INFO_EX
-$fontInfo.cbSize = [MarshalAs]::SizeOf($fontInfo)
-$fontInfo.FaceName = "Consolas" # <--- Tu peux changer par "Lucida Console" ou "Cascadia Mono"
-$fontInfo.dwFontSizeY = 16       # <--- Taille de la police
-[WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
 
-# Applique le nettoyage de l'écran pour injecter le fond noir partout immédiatement
+try {
+    # Récupération propre du handle de sortie standard (-11 = STD_OUTPUT_HANDLE)
+    $hOutput = [WinConsole]::GetStdHandle(-11)
+    if ($hOutput -and $hOutput -ne [IntPtr]::Zero) {
+        $fontInfo = New-Object WinConsole+CONSOLE_FONT_INFO_EX
+        
+        # CORRECTIF DE LA LIGNE 41 : Utilisation de la classe Marshal correcte
+        $fontInfo.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($fontInfo)
+        $fontInfo.FaceName = "Consolas"
+        $fontInfo.dwFontSizeY = 16
+        
+        [WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
+    }
+} catch {
+    # Silencieux si l'environnement de la console bloque la modification de police
+}
+
+# Applique le nettoyage immédiat de l'écran en noir profond
 Clear-Host
 
 # -------------------------------------------------------------------------
