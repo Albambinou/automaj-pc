@@ -16,6 +16,10 @@ $maj_a_grave = "$([char]192)" # À
 # -------------------------------------------------------------------------
 # CONFIGURATION DE LA CONSOLE (FOND NOIR & POLICE CONSOLAS)
 # -------------------------------------------------------------------------
+# Initialisation des variables globales pour la restauration de la police
+$hOutput = $null
+$fontInfo = $null
+
 $Host.UI.RawUI.BackgroundColor = "Black"
 $Host.UI.RawUI.ForegroundColor = "White"
 
@@ -259,6 +263,15 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
 } else {
     Write-Host " -> [Attention] L'outil 'winget' est introuvable. ${maj_e_aigu}tape saut${e_aigu}e." -ForegroundColor Yellow
 }
+
+# ANTI-BUG BLEU WINGET : Restauration forcée des paramètres de couleur et de police
+$Host.UI.RawUI.BackgroundColor = "Black"
+$Host.UI.RawUI.ForegroundColor = "White"
+try {
+    if ($hOutput -and $fontInfo) {
+        [WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
+    }
+} catch {}
 
 Write-Host ""
 Write-Host "----------------------------------------------------------"
