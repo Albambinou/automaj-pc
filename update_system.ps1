@@ -2,14 +2,14 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 12288
 
 # Raccourcis universels pour les caractères accentués (Noms distincts pour éviter les conflits)
-$e_aigu      = "$([char]233)" # é
-$a_grave     = "$([char]224)" # à
-$e_grave     = "$([char]232)" # è
-$u_grave     = "$([char]249)" # ù
-$a_circo     = "$([char]226)" # â
-$e_circo     = "$([char]234)" # ê
-$o_circo     = "$([char]244)" # ô
-$c_cedi      = "$([char]231)" # ç
+$e_aigu    = "$([char]233)" # é
+$a_grave   = "$([char]224)" # à
+$e_grave   = "$([char]232)" # è
+$u_grave   = "$([char]249)" # ù
+$a_circo   = "$([char]226)" # â
+$e_circo   = "$([char]234)" # ê
+$o_circo   = "$([char]244)" # ô
+$c_cedi    = "$([char]231)" # ç
 $maj_e_aigu  = "$([char]201)" # É
 $maj_a_grave = "$([char]192)" # À
 
@@ -55,7 +55,7 @@ try {
 Clear-Host
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE
+# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (CORRIGÉE POUR FERMETURE IMMÉDIATE)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -65,17 +65,30 @@ if (-not $isAdmin) {
     } else {
         $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
         if ($ScriptContent) {
+            # On génère un fichier temporaire persistant le temps de l'exécution, mais nettoyé par le processus admin lui-même ou géré sans blocage
             $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
             Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
-            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs -Wait
-            Remove-Item -Path $TempFile -Force -ErrorAction SilentlyContinue
+            
+            # Suppression du -Wait pour permettre à l'ancienne console de mourir en paix
+            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs
         } else {
             Clear-Host
             Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
             Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
         }
     }
+    # Au revoir, cher ancien processus inutile
     Exit
+}
+
+# Code de nettoyage si exécuté via le bloc de script temporaire
+$TempFileCheck = Join-Path $env:TEMP "update_system_temp.ps1"
+if (Test-Path $TempFileCheck) {
+    # On attend un tout petit peu que l'ancien processus ait fait son "Exit" pour éviter les verrous de fichier, puis on supprime
+    Start-ThreadJob -ScriptBlock {
+        Start-Sleep -Seconds 2
+        Remove-Item -Path $using:TempFileCheck -Force -ErrorAction SilentlyContinue
+    } | Out-Null
 }
 
 $windowSize = New-Object System.Management.Automation.Host.Size(85, 35)
@@ -88,7 +101,7 @@ $host.UI.RawUI.WindowSize = $windowSize
 # -------------------------------------------------------------------------
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "     ASSISTANT DE MISE $maj_a_grave JOUR DE VOTRE PC     " -ForegroundColor Cyan
+Write-Host "    ASSISTANT DE MISE $maj_a_grave JOUR DE VOTRE PC     " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Ce script va forcer l'installation de TOUT ce qui est"
 Write-Host " disponible (Standard, Logiciels, Pilotes, Office)."
