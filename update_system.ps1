@@ -55,7 +55,7 @@ try {
 Clear-Host
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (CORRIGÉE POUR FERMETURE IMMÉDIATE)
+# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (FORÇAGE FERMETURE CONSOLE PARENTE)
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -65,20 +65,19 @@ if (-not $isAdmin) {
     } else {
         $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
         if ($ScriptContent) {
-            # On génère un fichier temporaire persistant le temps de l'exécution, mais nettoyé par le processus admin lui-même ou géré sans blocage
             $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
             Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
-            
-            # Suppression du -Wait pour permettre à l'ancienne console de mourir en paix
             Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs
         } else {
             Clear-Host
             Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
             Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
+            Exit
         }
     }
-    # Au revoir, cher ancien processus inutile
-    Exit
+    
+    # Éradication propre et immédiate de la fenêtre actuelle, même si lancée depuis un prompt existant
+    Stop-Process -Id $PID -Force
 }
 
 # Code de nettoyage si exécuté via le bloc de script temporaire
