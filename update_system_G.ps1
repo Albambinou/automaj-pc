@@ -1,7 +1,7 @@
 # Forçage des protocoles réseau
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocolType::Tls12 -bor 12288
 
-# Caractères accentués (pour le stockage)
+# Caractères accentués
 $e_aigu      = "$([char]233)" # é
 $a_grave     = "$([char]224)" # à
 $e_grave     = "$([char]232)" # è
@@ -38,7 +38,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # -------------------------------------------------------------------------
-# SCRIPT POUR LE CURSEUR MODERNE (Correction du vieux curseur)
+# RECOUVREMENT DU CURSEUR SYSTÈME MODERNE
 # -------------------------------------------------------------------------
 $CursorSource = @"
 using System;
@@ -85,9 +85,7 @@ $TitleLabel.Location = New-Object System.Drawing.Point(20, 15)
 $TitleLabel.ForeColor = [System.Drawing.Color]::DeepSkyBlue
 $Form.Controls.Add($TitleLabel)
 
-# -------------------------------------------------------------------------
-# SÉLECTION DE LA LANGUE (Dropdown combobox)
-# -------------------------------------------------------------------------
+# Sélection de la Langue
 $LangLabel = New-Object System.Windows.Forms.Label
 $LangLabel.Text = "Langue / Language :"
 $LangLabel.Location = New-Object System.Drawing.Point(430, 18)
@@ -104,7 +102,7 @@ $LangCombo.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
 $LangCombo.ForeColor = [System.Drawing.Color]::White
 $null = $LangCombo.Items.Add("FR")
 $null = $LangCombo.Items.Add("EN")
-$LangCombo.SelectedIndex = 0 # Par défaut en Français
+$LangCombo.SelectedIndex = 0
 $Form.Controls.Add($LangCombo)
 
 # Groupe de Checkboxes
@@ -146,15 +144,15 @@ $GroupBox.Controls.Add($chkOffice)
 # Barre de progression
 $ProgressBar = New-Object System.Windows.Forms.ProgressBar
 $ProgressBar.Location = New-Object System.Drawing.Point(20, 230)
-$ProgressBar.Size = New-Object System.Drawing.Size(320, 30)
+$ProgressBar.Size = New-Object System.Drawing.Size(210, 30) # Réduit un peu pour faire de la place aux boutons
 $ProgressBar.Style = "Continuous"
 $Form.Controls.Add($ProgressBar)
 
 # Bouton Voir les Logs
 $LogBtn = New-Object System.Windows.Forms.Button
 $LogBtn.Text = "Voir les Logs"
-$LogBtn.Location = New-Object System.Drawing.Point(355, 230)
-$LogBtn.Size = New-Object System.Drawing.Size(120, 30)
+$LogBtn.Location = New-Object System.Drawing.Point(245, 230)
+$LogBtn.Size = New-Object System.Drawing.Size(115, 30)
 $LogBtn.BackColor = [System.Drawing.Color]::DodgerBlue
 $LogBtn.FlatStyle = "Flat"
 $LogBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
@@ -164,14 +162,26 @@ $Form.Controls.Add($LogBtn)
 # Bouton Lancer
 $StartBtn = New-Object System.Windows.Forms.Button
 $StartBtn.Text = "Lancer"
-$StartBtn.Location = New-Object System.Drawing.Point(490, 230)
-$StartBtn.Size = New-Object System.Drawing.Size(120, 30)
+$StartBtn.Location = New-Object System.Drawing.Point(370, 230)
+$StartBtn.Size = New-Object System.Drawing.Size(115, 30)
 $StartBtn.BackColor = [System.Drawing.Color]::SeaGreen
 $StartBtn.FlatStyle = "Flat"
-$StartBtn.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$StartBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 $StartBtn.Cursor = $ModernHandCursor
 $Form.Controls.Add($StartBtn)
 
+# Bouton Arrêter
+$StopBtn = New-Object System.Windows.Forms.Button
+$StopBtn.Text = "Arr${e_grave}ter"
+$StopBtn.Location = New-Object System.Drawing.Point(495, 230)
+$StopBtn.Size = New-Object System.Drawing.Size(115, 30)
+$StopBtn.BackColor = [System.Drawing.Color]::Firebrick
+$StopBtn.ForeColor = [System.Drawing.Color]::White #
+$StopBtn.FlatStyle = "Flat"
+$StopBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+$StopBtn.Cursor = $ModernHandCursor
+$StopBtn.Enabled = $false # Désactivé par défaut tant qu'on ne lance rien
+$Form.Controls.Add($StopBtn)
 # ZONE DE LOGS
 $LogTextBox = New-Object System.Windows.Forms.RichTextBox
 $LogTextBox.Size = New-Object System.Drawing.Size(590, 240)
@@ -182,65 +192,48 @@ $LogTextBox.ReadOnly = $true
 $LogTextBox.ScrollBars = [System.Windows.Forms.RichTextBoxScrollBars]::Vertical
 $Form.Controls.Add($LogTextBox)
 
-# -------------------------------------------------------------------------
-# BOUTON DISCORD MODIFIÉ (Nouveau texte + Curseur Moderne Fixé)
-# -------------------------------------------------------------------------
+# Bouton Discord
 $DiscordBtn = New-Object System.Windows.Forms.Button
 $DiscordBtn.Size = New-Object System.Drawing.Size(220, 36)
-$DiscordBtn.Location = New-Object System.Drawing.Point(205, 528) # Centré à l'écran
+$DiscordBtn.Location = New-Object System.Drawing.Point(205, 528)
 $DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(88, 101, 242)
 $DiscordBtn.ForeColor = [System.Drawing.Color]::White
 $DiscordBtn.FlatStyle = "Flat"
 $DiscordBtn.FlatAppearance.BorderSize = 0
 $DiscordBtn.Text = "    Rejoins-nous sur Discord"
 $DiscordBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-$DiscordBtn.Cursor = $ModernHandCursor # Utilise maintenant le vrai curseur système moderne !
+$DiscordBtn.Cursor = $ModernHandCursor
 
-# Dessin de l'icône Discord
 $DiscordBtn.Add_Paint({
     param($sender, $e)
-    $g = $e.Graphics
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-    $xOff = 12
-    $yOff = 10
+    $xOff = 12; $yOff = 10
     $points = @(
-        (New-Object System.Drawing.PointF($xOff + 3.9, $yOff + 1.2)),
-        (New-Object System.Drawing.PointF($xOff + 5.1, $yOff + 3.1)),
-        (New-Object System.Drawing.PointF($xOff + 7.8, $yOff + 2.5)),
-        (New-Object System.Drawing.PointF($xOff + 8.4, $yOff + 1.7)),
-        (New-Object System.Drawing.PointF($xOff + 11.1, $yOff + 1.7)),
-        (New-Object System.Drawing.PointF($xOff + 11.7, $yOff + 2.5)),
-        (New-Object System.Drawing.PointF($xOff + 14.4, $yOff + 3.1)),
-        (New-Object System.Drawing.PointF($xOff + 15.6, $yOff + 1.2)),
-        (New-Object System.Drawing.PointF($xOff + 17.5, $yOff + 4.2)),
-        (New-Object System.Drawing.PointF($xOff + 19.5, $yOff + 11.0)),
-        (New-Object System.Drawing.PointF($xOff + 16.5, $yOff + 14.5)),
-        (New-Object System.Drawing.PointF($xOff + 14.8, $yOff + 12.5)),
-        (New-Object System.Drawing.PointF($xOff + 16.3, $yOff + 11.2)),
-        (New-Object System.Drawing.PointF($xOff + 15.1, $yOff + 10.3)),
-        (New-Object System.Drawing.PointF($xOff + 11.5, $yOff + 11.5)),
-        (New-Object System.Drawing.PointF($xOff + 8.0, $yOff + 11.5)),
-        (New-Object System.Drawing.PointF($xOff + 4.4, $yOff + 10.3)),
-        (New-Object System.Drawing.PointF($xOff + 3.2, $yOff + 11.2)),
-        (New-Object System.Drawing.PointF($xOff + 4.7, $yOff + 12.5)),
-        (New-Object System.Drawing.PointF($xOff + 3.0, $yOff + 14.5)),
-        (New-Object System.Drawing.PointF($xOff + 0.0, $yOff + 11.0)),
-        (New-Object System.Drawing.PointF($xOff + 2.0, $yOff + 4.2))
+        (New-Object System.Drawing.PointF($xOff + 3.9, $yOff + 1.2)),(New-Object System.Drawing.PointF($xOff + 5.1, $yOff + 3.1)),
+        (New-Object System.Drawing.PointF($xOff + 7.8, $yOff + 2.5)),(New-Object System.Drawing.PointF($xOff + 8.4, $yOff + 1.7)),
+        (New-Object System.Drawing.PointF($xOff + 11.1, $yOff + 1.7)),(New-Object System.Drawing.PointF($xOff + 11.7, $yOff + 2.5)),
+        (New-Object System.Drawing.PointF($xOff + 14.4, $yOff + 3.1)),(New-Object System.Drawing.PointF($xOff + 15.6, $yOff + 1.2)),
+        (New-Object System.Drawing.PointF($xOff + 17.5, $yOff + 4.2)),(New-Object System.Drawing.PointF($xOff + 19.5, $yOff + 11.0)),
+        (New-Object System.Drawing.PointF($xOff + 16.5, $yOff + 14.5)),(New-Object System.Drawing.PointF($xOff + 14.8, $yOff + 12.5)),
+        (New-Object System.Drawing.PointF($xOff + 16.3, $yOff + 11.2)),(New-Object System.Drawing.PointF($xOff + 15.1, $yOff + 10.3)),
+        (New-Object System.Drawing.PointF($xOff + 11.5, $yOff + 11.5)),(New-Object System.Drawing.PointF($xOff + 8.0, $yOff + 11.5)),
+        (New-Object System.Drawing.PointF($xOff + 4.4, $yOff + 10.3)),(New-Object System.Drawing.PointF($xOff + 3.2, $yOff + 11.2)),
+        (New-Object System.Drawing.PointF($xOff + 4.7, $yOff + 12.5)),(New-Object System.Drawing.PointF($xOff + 3.0, $yOff + 14.5)),
+        (New-Object System.Drawing.PointF($xOff + 0.0, $yOff + 11.0)),(New-Object System.Drawing.PointF($xOff + 2.0, $yOff + 4.2))
     )
     $g.FillPolygon($brush, $points)
     $bgBrush = New-Object System.Drawing.SolidBrush($sender.BackColor)
     $g.FillEllipse($bgBrush, ($xOff + 5.5), ($yOff + 6.0), 2.5, 2.5)
     $g.FillEllipse($bgBrush, ($xOff + 11.5), ($yOff + 6.0), 2.5, 2.5)
 })
-
 $DiscordBtn.Add_MouseEnter({ $DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(71, 82, 196) })
 $DiscordBtn.Add_MouseLeave({ $DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(88, 101, 242) })
 $DiscordBtn.Add_Click({ Start-Process "https://discord.gg/QEKNGfqdpu" })
 $Form.Controls.Add($DiscordBtn)
 
 # -------------------------------------------------------------------------
-# GESTION DU CHANGEMENT DE LANGUE (TRADUCTION DE L'INTERFACE GUI)
+# GESTION DES TRADUCTIONS GUI
 # -------------------------------------------------------------------------
 $LangCombo.Add_SelectedIndexChanged({
     if ($LangCombo.SelectedItem -eq "EN") {
@@ -253,6 +246,7 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkOffice.Text = "Step 4: Microsoft Office 365 (Update / Install + Activation)"
         $LogBtn.Text = "View Logs"
         $StartBtn.Text = "Start"
+        $StopBtn.Text = "Stop"
         $DiscordBtn.Text = "    Join us on Discord"
     } else {
         $Form.Text = "Assistant de mise $a_grave jour PC"
@@ -264,20 +258,20 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkOffice.Text = "${maj_e_aigu}tape 4 : Microsoft Office 365 (MAJ / Installation + Activation)"
         $LogBtn.Text = "Voir les Logs"
         $StartBtn.Text = "Lancer"
+        $StopBtn.Text = "Arr${e_grave}ter"
         $DiscordBtn.Text = "    Rejoins-nous sur Discord"
     }
 })
 
 # -------------------------------------------------------------------------
-# FONCTION LOGS ET FENÊTRE SECONDAIRE WINGET
+# COULEURS DES LOGS ET INTERFACES DIVERSES
 # -------------------------------------------------------------------------
 function Append-ColoredLog ($TextBox, $Text) {
     $Color = [System.Drawing.Color]::White 
     if ($Text -match '^\[\*\]' -or $Text -match '^\[\d\]') { $Color = [System.Drawing.Color]::DeepSkyBlue }
     elseif ($Text -match '^ -> Succ' -or $Text -match '^ -> .*nettoy' -or $Text -match 'TERMIN' -or $Text -match '===' -or $Text -match 'pass' -or $Text -match 'annul' -or $Text -match 'activ') { $Color = [System.Drawing.Color]::LimeGreen }
     elseif ($Text -match '^ ->' -or $Text -match '^   ->' -or $Text -match '^ \[Pause\]') { $Color = [System.Drawing.Color]::LightGray }
-    elseif ($Text -match '\[ERREUR\]' -or $Text -match '\[Attention\]' -or $Text -match '^ \! ') { $Color = [System.Drawing.Color]::OrangeRed }
-    elseif ($Text -match '^   \[Choco\]') { $Color = [System.Drawing.Color]::Violet }
+    elseif ($Text -match '\[ERREUR\]' -or $Text -match '\[Attention\]' -or $Text -match '^ \! ' -or $Text -match 'STOP') { $Color = [System.Drawing.Color]::OrangeRed }
 
     $TextBox.SelectionStart = $TextBox.TextLength
     $TextBox.SelectionLength = 0
@@ -289,9 +283,8 @@ function Append-ColoredLog ($TextBox, $Text) {
 }
 
 $LogBtn.Add_Click({
-    if (Test-Path $GlobalLogFile) {
-        Start-Process notepad.exe -ArgumentList "`"$GlobalLogFile`""
-    } else {
+    if (Test-Path $GlobalLogFile) { Start-Process notepad.exe -ArgumentList "`"$GlobalLogFile`"" } 
+    else {
         $msg = if ($LangCombo.SelectedItem -eq "EN") { "No logs available yet." } else { "Aucun log disponible pour le moment." }
         [System.Windows.Forms.MessageBox]::Show($Form, $msg, "Information", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
     }
@@ -303,73 +296,46 @@ function Show-WingetSelectionForm ($AppList) {
     $SubForm.Size = New-Object System.Drawing.Size(500, 450)
     $SubForm.StartPosition = "CenterParent"
     $SubForm.FormBorderStyle = "FixedDialog"
-    $SubForm.MaximizeBox = $false
     $SubForm.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
     $SubForm.ForeColor = [System.Drawing.Color]::White
 
     $Label = New-Object System.Windows.Forms.Label
     $Label.Text = if ($LangCombo.SelectedItem -eq "EN") { "Check apps to update:" } else { "Cochez les applications ${a_grave} mettre ${a_grave} jour :" }
-    $Label.Location = New-Object System.Drawing.Point(15, 15)
-    $Label.Size = New-Object System.Drawing.Size(450, 20)
-    $Label.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $Label.Location = New-Object System.Drawing.Point(15, 15); $Label.Size = New-Object System.Drawing.Size(450, 20); $Label.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $SubForm.Controls.Add($Label)
 
     $Panel = New-Object System.Windows.Forms.Panel
-    $Panel.Location = New-Object System.Drawing.Point(15, 45)
-    $Panel.Size = New-Object System.Drawing.Size(450, 280)
-    $Panel.AutoScroll = $true
-    $Panel.BorderStyle = "FixedSingle"
+    $Panel.Location = New-Object System.Drawing.Point(15, 45); $Panel.Size = New-Object System.Drawing.Size(450, 280); $Panel.AutoScroll = $true; $Panel.BorderStyle = "FixedSingle"
     $SubForm.Controls.Add($Panel)
 
     $chkBoxes = @()
     $yPos = 10
     foreach ($app in $AppList) {
-        $chk = New-Object System.Windows.Forms.CheckBox
-        $chk.Text = $app.Name
-        $chk.Tag = $app.Id
-        $chk.Location = New-Object System.Drawing.Point(10, $yPos)
-        $chk.Size = New-Object System.Drawing.Size(400, 25)
-        $chk.Checked = $true
-        $Panel.Controls.Add($chk)
-        $chkBoxes += $chk
-        $yPos += 30
+        $chk = New-Object System.Windows.Forms.CheckBox; $chk.Text = $app.Name; $chk.Tag = $app.Id; $chk.Location = New-Object System.Drawing.Point(10, $yPos); $chk.Size = New-Object System.Drawing.Size(400, 25); $chk.Checked = $true
+        $Panel.Controls.Add($chk); $chkBoxes += $chk; $yPos += 30
     }
 
     $UpdateBtn = New-Object System.Windows.Forms.Button
     $UpdateBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
-    $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350)
-    $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35)
-    $UpdateBtn.BackColor = [System.Drawing.Color]::SeaGreen
-    $UpdateBtn.FlatStyle = "Flat"
-    $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-    $UpdateBtn.Cursor = $ModernHandCursor
+    $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.BackColor = [System.Drawing.Color]::SeaGreen; $UpdateBtn.FlatStyle = "Flat"; $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
     $SubForm.Controls.Add($UpdateBtn)
 
     $CancelBtn = New-Object System.Windows.Forms.Button
     $CancelBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
-    $CancelBtn.Location = New-Object System.Drawing.Point(255, 350)
-    $CancelBtn.Size = New-Object System.Drawing.Size(210, 35)
-    $CancelBtn.BackColor = [System.Drawing.Color]::Firebrick
-    $CancelBtn.FlatStyle = "Flat"
-    $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-    $CancelBtn.Cursor = $ModernHandCursor
+    $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.BackColor = [System.Drawing.Color]::Firebrick; $CancelBtn.FlatStyle = "Flat"; $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
     $SubForm.Controls.Add($CancelBtn)
 
     $SelectedIds = @()
     $script:actionChosen = "none"
 
-    $UpdateBtn.Add_Click({
-        foreach ($cb in $chkBoxes) { if ($cb.Checked) { $SelectedIds += $cb.Tag } }
-        $script:actionChosen = "update"; $SubForm.Close()
-    })
+    $UpdateBtn.Add_Click({ foreach ($cb in $chkBoxes) { if ($cb.Checked) { $SelectedIds += $cb.Tag } }; $script:actionChosen = "update"; $SubForm.Close() })
     $CancelBtn.Add_Click({ $script:actionChosen = "cancel"; $SubForm.Close() })
-
     $SubForm.ShowDialog() | Out-Null
     return @{ Action = $script:actionChosen; Ids = $SelectedIds }
 }
 
 # -------------------------------------------------------------------------
-# THREAD ET LOGIQUE D'ARRIÈRE-PLAN
+# THREAD RUNSPACE (SCRIPT DE TRAITEMENT PRINCIPAL)
 # -------------------------------------------------------------------------
 $SharedData = [hashtable]::Synchronized(@{ Logs = [System.Collections.ArrayList]::new(); Progress = 0; Status = "Ready"; WingetApps = $null; WingetSelectionResult = $null; PromptResponse = "" })
 
@@ -380,7 +346,7 @@ $ScriptBlock = {
         try { $Msg | Add-Content -Path $GlobalLogFile -ErrorAction SilentlyContinue } catch {}
     }
     function Ask-Confirmation ($Title) {
-        $SharedData.PromptResponse = "" ; $SharedData.Status = $Title
+        $SharedData.PromptResponse = ""; $SharedData.Status = $Title
         while ($SharedData.Status -eq $Title) { Start-Sleep -Milliseconds 200 }
         return $SharedData.PromptResponse
     }
@@ -393,36 +359,33 @@ $ScriptBlock = {
         if ($Config.Office) { $totalSteps++ }
         $currentStep = 0
 
-        # --- LIBÉRATION SYSTEME GPO ---
+        # --- GPO UNLOCK ---
         $currentStep++
         $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-        Log "[*] Lib$($Accents.e_aigu)ration syst$($Accents.e_grave)me des restrictions GPO pilotes..."
+        Log "[*] Lib$($Accents.e_aigu)ration du syst$($Accents.e_grave)me des restrictions GPO..."
         $gpoPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
         if (-not (Test-Path $gpoPath)) { New-Item -Path $gpoPath -Force | Out-Null }
         Set-ItemProperty -Path $gpoPath -Name "DenyUnspecified" -Value 0 -Type DWord -ErrorAction SilentlyContinue
         gpupdate /force | Out-Null
-        Log " -> Restrictions GPO nettoy$($Accents.e_aigu)es."
 
         # --- WINDOWS UPDATE ---
         if ($Config.WU) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-            Log "[1] Recherche et installation des mises $($Accents.a_grave) jour Windows Update..."
+            Log "[1] Recherche et installation Windows Update..."
             Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
             if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
                 Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
             }
-            Log " -> Analyse Windows Update lanc$($Accents.e_aigu)e (Patientez)..."
             Import-Module PSWindowsUpdate -Force
             try { $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String; if ($WUOutput) { Log $WUOutput } } catch {}
-            Log " -> Fin de l'analyse Windows Update."
         }
 
         # --- WINGET ---
         if ($Config.Winget) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-            Log "[2] Analyse des logiciels install$($Accents.e_aigu)s (Winget)..."
+            Log "[2] Analyse des applications (Winget)..."
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 & winget source update | Out-Null
                 $tempFile = Join-Path $env:TEMP "winget_runspace.txt"
@@ -439,40 +402,38 @@ $ScriptBlock = {
                         }
                     }
                 }
-                if ($apps.Count -eq 0) { Log " -> Toutes les applications sont d$($Accents.e_aigu)j$($Accents.a_grave) $($Accents.a_grave) jour !" }
+                if ($apps.Count -eq 0) { Log " -> Tout est $($Accents.a_grave) jour !" }
                 else {
                     $SharedData.WingetApps = $apps; $SharedData.Status = "WingetPrompt"
                     while ($SharedData.Status -eq "WingetPrompt") { Start-Sleep -Milliseconds 200 }
                     $Result = $SharedData.WingetSelectionResult
                     if ($Result -and $Result.Action -eq "update" -and $Result.Ids.Count -gt 0) {
-                        foreach ($id in $Result.Ids) { Log "   -> Mise $($Accents.a_grave) jour de : $id"; Start-Process winget -ArgumentList "upgrade --id $id --accept-package-agreements --accept-source-agreements" -NoNewWindow -Wait }
-                    } else { Log " -> Aucune mise $($Accents.a_grave) jour applicative appliqu$($Accents.e_aigu)e." }
+                        foreach ($id in $Result.Ids) { Log "   -> MAJ : $id"; Start-Process winget -ArgumentList "upgrade --id $id --accept-package-agreements --accept-source-agreements" -NoNewWindow -Wait }
+                    }
                 }
-            } else { Log " -> [Attention] L'outil 'winget' est introuvable." }
+            }
         }
 
         # --- NVIDIA ---
         if ($Config.Nvidia) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-            Log "[3] V$($Accents.e_aigu)rification du pilote graphique NVIDIA..."
+            Log "[3] V$($Accents.e_aigu)rification pilote NVIDIA..."
             if (Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" }) {
                 if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"; Invoke-Expression $chocoScript 6>$null 2>$null | Out-Null }
                 $chocoLog = Join-Path $env:TEMP "choco_temp.log"
                 Start-Process choco -ArgumentList "upgrade nvidia-display-driver -y --no-progress -r" -RedirectStandardOutput $chocoLog -NoNewWindow -Wait
                 if (Test-Path $chocoLog) { Get-Content $chocoLog | ForEach-Object { Log "   [Choco] $_" }; Remove-Item $chocoLog -Force }
-                Log " -> Traitement du pilote NVIDIA termin$($Accents.e_aigu)."
-            } else { Log " -> Aucune carte graphique NVIDIA d$($Accents.e_aigu)tect$($Accents.e_aigu)e." }
+            }
         }
 
         # --- OFFICE 365 ---
         if ($Config.Office) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-            Log "[4] V$($Accents.e_aigu)rification de Microsoft Office 365..."
+            Log "[4] V$($Accents.e_aigu)rification Microsoft Office..."
             $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\winword.exe" -ErrorAction SilentlyContinue)
             if (-not $isOfficeInstalled) {
-                Log " ! Microsoft 365 n'est pas install$($Accents.e_aigu) sur ce PC."
                 $ReponseInstall = Ask-Confirmation -Title "PromptOfficeInstall"
                 if ($ReponseInstall -eq "Yes") {
                     $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
@@ -481,7 +442,6 @@ $ScriptBlock = {
                     Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow; Start-Sleep -Seconds 15
                     while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 5 }
                     Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
-                    Log " -> L'installation de Microsoft Office 365 est termin$($Accents.e_aigu) !"
                     $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
                     if ($ReponseAct -eq "Yes") {
                         $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
@@ -490,9 +450,8 @@ $ScriptBlock = {
                     }
                 }
             } else {
-                Log " -> Microsoft Office 365 est d$($Accents.e_aigu)j$($Accents.a_grave) install$($Accents.e_aigu) sur ce PC."
                 $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
-                if (Test-Path $pathC2R) { Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -NoNewWindow; Log " -> Mises $($Accents.a_grave) jour Office trait$($Accents.e_aigu)es." }
+                if (Test-Path $pathC2R) { Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -NoNewWindow }
             }
         }
 
@@ -505,7 +464,7 @@ $ScriptBlock = {
 }
 
 # -------------------------------------------------------------------------
-# HORLOGE SURVEILLANCE UI
+# HORLOGE SURVEILLANCE UI (RAFRAÎCHISSEMENT ET POP-UPS)
 # -------------------------------------------------------------------------
 $Timer = New-Object System.Windows.Forms.Timer
 $Timer.Interval = 100
@@ -540,14 +499,18 @@ $Timer.Add_Tick({
         $msg = if ($LangCombo.SelectedItem -eq "EN") { "Process complete." } else { "Le processus est termin${e_aigu}." }
         $title = if ($LangCombo.SelectedItem -eq "EN") { "Success" } else { "Succ${e_grave}s" }
         [System.Windows.Forms.MessageBox]::Show($Form, $msg, $title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-        $StartBtn.Enabled = $true; $GroupBox.Enabled = $true
+        
+        # Restauration interface
+        $StartBtn.Enabled = $true; $GroupBox.Enabled = $true; $StopBtn.Enabled = $false
         if ($script:PowerShellInstance) { $script:PowerShellInstance.EndInvoke($script:AsyncResult); $script:PowerShellInstance.Dispose(); $script:Runspace.Close(); $script:Runspace.Dispose() }
     }
 })
 
-# BOUTON LANCER
+# -------------------------------------------------------------------------
+# LOGIQUE DES BOUTONS (LANCER ET ARRÊTER)
+# -------------------------------------------------------------------------
 $StartBtn.Add_Click({
-    $StartBtn.Enabled = $false; $GroupBox.Enabled = $false; $LogTextBox.Clear(); $ProgressBar.Value = 0
+    $StartBtn.Enabled = $false; $GroupBox.Enabled = $false; $StopBtn.Enabled = $true; $LogTextBox.Clear(); $ProgressBar.Value = 0
     $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
     $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave }
     $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
@@ -559,9 +522,35 @@ $StartBtn.Add_Click({
     $script:PowerShellInstance.AddScript($ScriptBlock).AddArgument($SharedData).AddArgument($Config).AddArgument($Accents).AddArgument($GlobalLogFile) | Out-Null
     $script:AsyncResult = $script:PowerShellInstance.BeginInvoke()
     $Timer.Start()
+    
     $msgLaunch = if ($LangCombo.SelectedItem -eq "EN") { "[!] Process started. Preparing environment..." } else { "[!] Processus lanc${e_aigu}. Pr${e_aigu}paration de l'environnement..." }
     Append-ColoredLog -TextBox $LogTextBox -Text $msgLaunch
 })
 
-# Lancement de la GUI
+# ÉVÉNEMENT DU BOUTON D'ARRÊT D'URGENCE (ROUGE)
+$StopBtn.Add_Click({
+    $Timer.Stop()
+    
+    # Message d'arrêt immédiat dans la console de log
+    $msgStop = if ($LangCombo.SelectedItem -eq "EN") { "[STOP] Process forcefully interrupted by user." } else { "[STOP] Processus interrompu de force par l'utilisateur." }
+    Append-ColoredLog -TextBox $LogTextBox -Text "`r`n$msgStop"
+    
+    # Fermeture brutale et propre du Runspace en arrière-plan
+    if ($script:PowerShellInstance) {
+        try {
+            $script:PowerShellInstance.Stop() # Arrête immédiatement l'exécution
+            $script:PowerShellInstance.Dispose()
+            $script:Runspace.Close()
+            $script:Runspace.Dispose()
+        } catch {}
+    }
+    
+    # Restauration de l'état de la GUI
+    $StartBtn.Enabled = $true
+    $GroupBox.Enabled = $true
+    $StopBtn.Enabled = $false
+    $ProgressBar.Value = 0
+})
+
+# Lancement final de la GUI
 $Form.ShowDialog() | Out-Null
