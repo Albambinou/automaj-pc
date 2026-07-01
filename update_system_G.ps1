@@ -492,7 +492,7 @@ function Show-WingetSelectionForm ($AppList) {
 }
 
 # -------------------------------------------------------------------------
-# THREAD RUNSPACE (SCRIPT DE TRAITEMENT PRINCIPAL CORRIGÉ)
+# THREAD RUNSPACE (SCRIPT DE TRAITEMENT PRINCIPAL COMPLETÉ)
 # -------------------------------------------------------------------------
 $SharedData = [hashtable]::Synchronized(@{ Logs = [System.Collections.ArrayList]::new(); Progress = 0; Status = "Ready"; WingetApps = $null; WingetSelectionResult = $null; PromptResponse = "" })
 
@@ -538,7 +538,7 @@ $ScriptBlock = {
             try { $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String; if ($WUOutput) { Log $WUOutput } } catch {}
         }
 
-        # --- WINGET BLINDÉ CONTRE LES VERROUILLAGES DE FICHIERS ---
+        # --- WINGET ---
         if ($Config.Winget) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
@@ -557,15 +557,12 @@ $ScriptBlock = {
                 $proc = [System.Diagnostics.Process]::Start($psi)
                 $output = $proc.StandardOutput.ReadToEnd()
                 $proc.WaitForExit()
-                
-                # RECURSION FIX : Fermeture propre pour libérer le fichier
                 $proc.Close()
                 
                 Set-Content -Path $tempFile -Value $output
 
                 $apps = @()
                 if (Test-Path $tempFile) {
-                    # RECURSION FIX : Boucle de vérification du verrouillage système
                     $retry = 0
                     while ($retry -lt 10) {
                         try {
@@ -628,19 +625,17 @@ $ScriptBlock = {
             }
         }
 
-        # --- OFFICE 365 (DÉTECTION + ACTIVATION AUTOMATIQUE SI NON ACTIVÉ) ---
+        # --- OFFICE 365 AUTONOME (DÉTECTION + ACTIVATION PAR DSTATUS) ---
         if ($Config.Office) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
             Log "[4] V$($Accents.e_aigu)rification de Microsoft Office..."
             
-            # 1. On cherche le dossier d'installation d'Office (64-bit ou 32-bit)
             $officePath = "C:\Program Files\Microsoft Office\Office16"
             if (-not (Test-Path $officePath)) { $officePath = "C:\Program Files (x86)\Microsoft Office\Office16" }
             $isOfficeInstalled = Test-Path "$officePath\ospp.vbs"
 
             if (-not $isOfficeInstalled) {
-                # --- CAS 1 : OFFICE N'EST PAS INSTALLÉ ---
                 $ReponseInstall = Ask-Confirmation -Title "PromptOfficeInstall"
                 if ($ReponseInstall -eq "Yes") {
                     $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
@@ -650,7 +645,6 @@ $ScriptBlock = {
                     while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 5 }
                     Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
                     
-                    # On revérifie le chemin après installation
                     if (-not (Test-Path $officePath)) { $officePath = "C:\Program Files (x86)\Microsoft Office\Office16" }
                     
                     $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
@@ -666,17 +660,12 @@ $ScriptBlock = {
                     }
                 }
             } else {
-                # --- CAS 2 : OFFICE EST INSTALLÉ -> ON VÉRIFIE L'ACTIVATION ---
                 Log "   -> Office pr$($Accents.e_aigu)sent. V$($Accents.e_aigu)rification de la licence..."
-                
-                # On lance ospp.vbs /dstatus pour récupérer l'état de la licence
                 $statusOutput = cscript //nologo "$officePath\ospp.vbs" /dstatus 2>&1 | Out-String
                 
-                # Si le statut ne contient pas "LICENSED", ou contient un statut d'erreur/expiration
                 if ($statusOutput -notmatch "LICENSE STATUS:\s+--- LICENSED ---" -or $statusOutput -match "LICENSE STATUS:\s+--- OOB_GRACE ---|--- NOTIFICATION ---|--- UNLICENSED ---") {
                     Log " -> [Attention] Office est install$($Accents.e_aigu) mais n'est PAS activ$($Accents.e_aigu) !"
                     Log "   -> Lancement automatique de l'activation KMS..."
-                    
                     $cmds = @(
                         "cscript //nologo `"$officePath\ospp.vbs`" /inpkey:XQNVK-8JYDB-WJ9W3-YJ8YR-WFG99",
                         "cscript //nologo `"$officePath\ospp.vbs`" /sethst:kms8.msguides.com",
@@ -685,14 +674,24 @@ $ScriptBlock = {
                     foreach ($cmd in $cmds) { Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow }
                     Log " -> Succ$($Accents.e_grave)s : Activation forc$($Accents.e_aigu)e termin$($Accents.e_aigu)e."
                 } else {
-                    Log " -> Succ$($Accents.e_grave)s : Office est d$($Accents.e_aigu)j$($Accents.a_grave) activ$($Accents.e_aigu) légalement ou via KMS."
+                    Log " -> Succ$($Accents.e_grave)s : Office est d$($Accents.e_aigu)j$($Accents.a_grave) activ$($Accents.e_aigu) l$($Accents.e_aigu)galement ou via KMS."
                 }
 
-                # Recherche classique des mises à jour d'Office
                 $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
                 if (Test-Path $pathC2R) { Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -NoNewWindow }
             }
         }
+
+        $SharedData.Progress = 100
+        Log "`r`n=========================================================="
+        Log "   TOUTES LES MISES $($Accents.maj_a_grave) JOUR SONT TERMIN$($Accents.maj_e_aigu)ES !"
+        Log "=========================================================="
+        $SharedData.Status = "Finished"
+    } catch { 
+        Log "[ERREUR] : $_"
+        $SharedData.Status = "Finished" 
+    }
+}
 
 # -------------------------------------------------------------------------
 # HORLOGE SURVEILLANCE UI (RAFRAÎCHISSEMENT ET POP-UPS)
