@@ -83,13 +83,12 @@ public class AcrylicBlur {
     }
 
     public static void EnableBlur(IntPtr hwnd) {
-        // Force la fenêtre à accepter la transparence des fenêtres composites (Layered Window)
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
 
         var policy = new AccentPolicy {
             AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
-            GradientColor = (45 << 24) | (10 & 0xFFFFFF) // Alpha 45, teinte sombre très profonde
+            GradientColor = (45 << 24) | (10 & 0xFFFFFF)
         };
 
         var policySize = Marshal.SizeOf(policy);
@@ -169,7 +168,6 @@ function Apply-ModernRoundedStyle ($Button, $HoverColor, $Radius = 12) {
         $brush = New-Object System.Drawing.SolidBrush($bgAlphaColor)
         $g.FillPath($brush, $path)
         
-        # Bordures fines et lumineuses adaptées au thème
         $borderColor = if ($sender.IsHovered) { $sender.HoverColor } else { [System.Drawing.Color]::FromArgb(70, 255, 255, 255) }
         if (-not $sender.Enabled) { $borderColor = [System.Drawing.Color]::FromArgb(30, 255, 255, 255) }
         $pen = New-Object System.Drawing.Pen($borderColor, 1.5)
@@ -313,11 +311,11 @@ $StopBtn.Enabled = $false
 Apply-ModernRoundedStyle $StopBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34)) 
 $Form.Controls.Add($StopBtn)
 
-# ZONE DE LOGS CORRIGÉE (FOND SOMBRE COHÉRENT ET ASSORTI)
+# ZONE DE LOGS
 $LogTextBox = New-Object System.Windows.Forms.RichTextBox
 $LogTextBox.Size = New-Object System.Drawing.Size(590, 240)
 $LogTextBox.Location = New-Object System.Drawing.Point(20, 275)
-$LogTextBox.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 20) # Finis les fonds blancs opaques
+$LogTextBox.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 20)
 $LogTextBox.ForeColor = [System.Drawing.Color]::White
 $LogTextBox.BorderStyle = [System.Windows.Forms.BorderStyle]::None
 $LogTextBox.Font = New-Object System.Drawing.Font("Consolas", 9.5)
@@ -530,7 +528,7 @@ $ScriptBlock = {
             try { $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String; if ($WUOutput) { Log $WUOutput } } catch {}
         }
 
-        # --- WINGET ---
+        # --- WINGET CORRIGÉ (SIMULATION DE TOUCHE Y) ---
         if ($Config.Winget) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
@@ -538,7 +536,21 @@ $ScriptBlock = {
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 & winget source update | Out-Null
                 $tempFile = Join-Path $env:TEMP "winget_runspace.txt"
-                Start-Process winget -ArgumentList "upgrade" -RedirectStandardOutput $tempFile -NoNewWindow -Wait
+                
+                # Injection automatique du "Y" dans le pipeline pour passer la question initiale
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = "powershell.exe"
+                $psi.Arguments = "-NoProfile -Command `"echo Y | winget upgrade`""
+                $psi.RedirectStandardOutput = $true
+                $psi.UseShellExecute = $false
+                $psi.CreateNoWindow = $true
+                
+                $proc = [System.Diagnostics.Process]::Start($psi)
+                $output = $proc.StandardOutput.ReadToEnd()
+                $proc.WaitForExit()
+                
+                Set-Content -Path $tempFile -Value $output
+
                 $apps = @()
                 if (Test-Path $tempFile) {
                     $upgradeOutput = Get-Content $tempFile | Select-String -Pattern '-' -NotMatch
@@ -557,7 +569,17 @@ $ScriptBlock = {
                     while ($SharedData.Status -eq "WingetPrompt") { Start-Sleep -Milliseconds 200 }
                     $Result = $SharedData.WingetSelectionResult
                     if ($Result -and $Result.Action -eq "update" -and $Result.Ids.Count -gt 0) {
-                        foreach ($id in $Result.Ids) { Log "   -> MAJ : $id"; Start-Process winget -ArgumentList "upgrade --id $id --accept-package-agreements --accept-source-agreements" -NoNewWindow -Wait }
+                        foreach ($id in $Result.Ids) { 
+                            Log "   -> MAJ : $id"
+                            # Injection de "Y" également lors de la phase de mise à jour individuelle par précaution
+                            $psiApps = New-Object System.Diagnostics.ProcessStartInfo
+                            $psiApps.FileName = "powershell.exe"
+                            $psiApps.Arguments = "-NoProfile -Command `"echo Y | winget upgrade --id $id --accept-package-agreements --accept-source-agreements`""
+                            $psiApps.UseShellExecute = $false
+                            $psiApps.CreateNoWindow = $true
+                            $procApps = [System.Diagnostics.Process]::Start($psiApps)
+                            $procApps.WaitForExit()
+                        }
                     }
                 }
             }
