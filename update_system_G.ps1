@@ -38,8 +38,78 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # -------------------------------------------------------------------------
-# RECOUVREMENT DU CURSEUR SYSTÈME MODERNE
+# API NATIVES WINDOWS POUR LE MODE COMPOSITE (LAYERED) ET L'ACRYLIQUE
 # -------------------------------------------------------------------------
+$AcrylicSource = @"
+using System;
+using System.Runtime.InteropServices;
+
+public class AcrylicBlur {
+    [DllImport("user32.dll")]
+    public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_LAYERED = 0x80000;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WindowCompositionAttributeData {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    public enum WindowCompositionAttribute {
+        WCA_ACCENT_POLICY = 19
+    }
+
+    public enum AccentState {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AccentPolicy {
+        public AccentState AccentState;
+        public int AccentFlags;
+        public int GradientColor;
+        public int AnimationId;
+    }
+
+    public static void EnableBlur(IntPtr hwnd) {
+        // Force la fenêtre à accepter la transparence des fenêtres composites (Layered Window)
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+
+        var policy = new AccentPolicy {
+            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            GradientColor = (45 << 24) | (10 & 0xFFFFFF) // Alpha 45, teinte sombre très profonde
+        };
+
+        var policySize = Marshal.SizeOf(policy);
+        var policyPtr = Marshal.AllocHGlobal(policySize);
+        Marshal.StructureToPtr(policy, policyPtr, false);
+
+        var data = new WindowCompositionAttributeData {
+            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+            Data = policyPtr,
+            SizeOfData = policySize
+        };
+
+        SetWindowCompositionAttribute(hwnd, ref data);
+        Marshal.FreeHGlobal(policyPtr);
+    }
+}
+"@
+Add-Type -TypeDefinition $AcrylicSource
+
+# Curseur moderne
 $CursorSource = @"
 using System;
 using System.Runtime.InteropServices;
@@ -48,21 +118,68 @@ using System.Windows.Forms;
 public class ModernCursor {
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
-
-    private const int IDC_HAND = 32649;
-
     public static Cursor GetModernHand() {
-        try {
-            IntPtr handle = LoadCursor(IntPtr.Zero, IDC_HAND);
-            return new Cursor(handle);
-        } catch {
-            return Cursors.Hand;
-        }
+        try { return new Cursor(LoadCursor(IntPtr.Zero, 32649)); } catch { return Cursors.Hand; }
     }
 }
 "@
 Add-Type -TypeDefinition $CursorSource -ReferencedAssemblies "System.Windows.Forms.dll", "System.Drawing.dll"
 $ModernHandCursor = [ModernCursor]::GetModernHand()
+
+# -------------------------------------------------------------------------
+# DESSIN AVANCÉ POUR BOUTONS ARRONDIS SANS INTERFÉRENCE SANS BUGS
+# -------------------------------------------------------------------------
+function Apply-ModernRoundedStyle ($Button, $HoverColor, $Radius = 12) {
+    $Button.FlatStyle = "Flat"
+    $Button.FlatAppearance.BorderSize = 0
+    $Button.FlatAppearance.CheckedBackColor = [System.Drawing.Color]::Transparent
+    $Button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::Transparent
+    $Button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::Transparent
+    $Button.BackColor = [System.Drawing.Color]::Transparent
+    
+    $btnText = $Button.Text
+    if ($btnText.Trim() -ne "") { $Button.Text = " " }
+    
+    $Button | Add-Member -MemberType NoteProperty -Name "BtnText" -Value $btnText -Force
+    $Button | Add-Member -MemberType NoteProperty -Name "IsHovered" -Value $false -Force
+    $Button | Add-Member -MemberType NoteProperty -Name "DefaultColor" -Value [System.Drawing.Color]::FromArgb(40, 25, 25, 25) -Force
+    $Button | Add-Member -MemberType NoteProperty -Name "HoverColor" -Value $HoverColor -Force
+
+    $Button.Add_MouseEnter({ $this.IsHovered = $true; $this.Invalidate() })
+    $Button.Add_MouseLeave({ $this.IsHovered = $false; $this.Invalidate() })
+
+    $Button.Add_Paint({
+        param($sender, $e)
+        $g = $e.Graphics
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        
+        $rect = New-Object System.Drawing.RectangleF(1, 1, ($sender.Width - 3), ($sender.Height - 3))
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $d = $Radius * 2
+        
+        $path.AddArc($rect.X, $rect.Y, $d, $d, 180, 90)
+        $path.AddArc(($rect.Right - $d), $rect.Y, $d, $d, 270, 90)
+        $path.AddArc(($rect.Right - $d), ($rect.Bottom - $d), $d, $d, 0, 90)
+        $path.AddArc($rect.X, ($rect.Bottom - $d), $d, $d, 90, 90)
+        $path.CloseFigure()
+
+        $bgAlphaColor = if ($sender.IsHovered) { $sender.HoverColor } else { $sender.DefaultColor }
+        if (-not $sender.Enabled) { $bgAlphaColor = [System.Drawing.Color]::FromArgb(15, 70, 70, 70) }
+        
+        $brush = New-Object System.Drawing.SolidBrush($bgAlphaColor)
+        $g.FillPath($brush, $path)
+        
+        # Bordures fines et lumineuses adaptées au thème
+        $borderColor = if ($sender.IsHovered) { $sender.HoverColor } else { [System.Drawing.Color]::FromArgb(70, 255, 255, 255) }
+        if (-not $sender.Enabled) { $borderColor = [System.Drawing.Color]::FromArgb(30, 255, 255, 255) }
+        $pen = New-Object System.Drawing.Pen($borderColor, 1.5)
+        $g.DrawPath($pen, $path)
+        
+        $flags = [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter
+        $textColor = if ($sender.Enabled) { $sender.ForeColor } else { [System.Drawing.Color]::FromArgb(100, 255, 255, 255) }
+        [System.Windows.Forms.TextRenderer]::DrawText($g, $sender.BtnText, $sender.Font, [System.Drawing.Rectangle]::Ceiling($rect), $textColor, $flags)
+    })
+}
 
 # -------------------------------------------------------------------------
 # FENÊTRE PRINCIPALE
@@ -73,8 +190,11 @@ $Form.Size = New-Object System.Drawing.Size(650, 615)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedDialog"
 $Form.MaximizeBox = $false
-$Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
-$Form.ForeColor = [System.Drawing.Color]::White
+$Form.BackColor = [System.Drawing.Color]::Black 
+
+$Form.Add_HandleCreated({
+    [AcrylicBlur]::EnableBlur($this.Handle)
+})
 
 # Titre principal
 $TitleLabel = New-Object System.Windows.Forms.Label
@@ -82,6 +202,7 @@ $TitleLabel.Text = "ASSISTANT DE MISE $maj_a_grave JOUR PC"
 $TitleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $TitleLabel.Size = New-Object System.Drawing.Size(400, 40)
 $TitleLabel.Location = New-Object System.Drawing.Point(20, 15)
+$TitleLabel.BackColor = [System.Drawing.Color]::Transparent
 $TitleLabel.ForeColor = [System.Drawing.Color]::DeepSkyBlue
 $Form.Controls.Add($TitleLabel)
 
@@ -91,6 +212,7 @@ $LangLabel.Text = "Langue / Language :"
 $LangLabel.Location = New-Object System.Drawing.Point(430, 18)
 $LangLabel.Size = New-Object System.Drawing.Size(110, 20)
 $LangLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$LangLabel.BackColor = [System.Drawing.Color]::Transparent
 $LangLabel.ForeColor = [System.Drawing.Color]::LightGray
 $Form.Controls.Add($LangLabel)
 
@@ -98,7 +220,7 @@ $LangCombo = New-Object System.Windows.Forms.ComboBox
 $LangCombo.Location = New-Object System.Drawing.Point(540, 15)
 $LangCombo.Size = New-Object System.Drawing.Size(70, 25)
 $LangCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$LangCombo.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+$LangCombo.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $LangCombo.ForeColor = [System.Drawing.Color]::White
 $null = $LangCombo.Items.Add("FR")
 $null = $LangCombo.Items.Add("EN")
@@ -110,6 +232,7 @@ $GroupBox = New-Object System.Windows.Forms.GroupBox
 $GroupBox.Text = " S${e_aigu}lectionnez les composants ${a_grave} traiter "
 $GroupBox.Size = New-Object System.Drawing.Size(590, 150)
 $GroupBox.Location = New-Object System.Drawing.Point(20, 65)
+$GroupBox.BackColor = [System.Drawing.Color]::Transparent
 $GroupBox.ForeColor = [System.Drawing.Color]::LightGray
 $Form.Controls.Add($GroupBox)
 
@@ -117,6 +240,8 @@ $chkWU = New-Object System.Windows.Forms.CheckBox
 $chkWU.Text = "${maj_e_aigu}tape 1 : Windows Update & Pilotes OS"
 $chkWU.Location = New-Object System.Drawing.Point(20, 30)
 $chkWU.Size = New-Object System.Drawing.Size(540, 25)
+$chkWU.BackColor = [System.Drawing.Color]::Transparent
+$chkWU.ForeColor = [System.Drawing.Color]::White
 $chkWU.Checked = $true
 $GroupBox.Controls.Add($chkWU)
 
@@ -124,6 +249,8 @@ $chkWinget = New-Object System.Windows.Forms.CheckBox
 $chkWinget.Text = "${maj_e_aigu}tape 2 : S${e_aigu}lection manuelle des MAJ Applications (Winget)"
 $chkWinget.Location = New-Object System.Drawing.Point(20, 60)
 $chkWinget.Size = New-Object System.Drawing.Size(540, 25)
+$chkWinget.BackColor = [System.Drawing.Color]::Transparent
+$chkWinget.ForeColor = [System.Drawing.Color]::White
 $chkWinget.Checked = $true
 $GroupBox.Controls.Add($chkWinget)
 
@@ -131,6 +258,8 @@ $chkNvidia = New-Object System.Windows.Forms.CheckBox
 $chkNvidia.Text = "${maj_e_aigu}tape 3 : Pilote Graphique NVIDIA (Automatique si pr${e_aigu}sent)"
 $chkNvidia.Location = New-Object System.Drawing.Point(20, 90)
 $chkNvidia.Size = New-Object System.Drawing.Size(540, 25)
+$chkNvidia.BackColor = [System.Drawing.Color]::Transparent
+$chkNvidia.ForeColor = [System.Drawing.Color]::White
 $chkNvidia.Checked = $true
 $GroupBox.Controls.Add($chkNvidia)
 
@@ -138,13 +267,15 @@ $chkOffice = New-Object System.Windows.Forms.CheckBox
 $chkOffice.Text = "${maj_e_aigu}tape 4 : Microsoft Office 365 (MAJ / Installation + Activation)"
 $chkOffice.Location = New-Object System.Drawing.Point(20, 120)
 $chkOffice.Size = New-Object System.Drawing.Size(540, 25)
+$chkOffice.BackColor = [System.Drawing.Color]::Transparent
+$chkOffice.ForeColor = [System.Drawing.Color]::White
 $chkOffice.Checked = $true
 $GroupBox.Controls.Add($chkOffice)
 
 # Barre de progression
 $ProgressBar = New-Object System.Windows.Forms.ProgressBar
 $ProgressBar.Location = New-Object System.Drawing.Point(20, 230)
-$ProgressBar.Size = New-Object System.Drawing.Size(210, 30) # Réduit un peu pour faire de la place aux boutons
+$ProgressBar.Size = New-Object System.Drawing.Size(210, 30)
 $ProgressBar.Style = "Continuous"
 $Form.Controls.Add($ProgressBar)
 
@@ -153,10 +284,10 @@ $LogBtn = New-Object System.Windows.Forms.Button
 $LogBtn.Text = "Voir les Logs"
 $LogBtn.Location = New-Object System.Drawing.Point(245, 230)
 $LogBtn.Size = New-Object System.Drawing.Size(115, 30)
-$LogBtn.BackColor = [System.Drawing.Color]::DodgerBlue
-$LogBtn.FlatStyle = "Flat"
 $LogBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$LogBtn.ForeColor = [System.Drawing.Color]::White
 $LogBtn.Cursor = $ModernHandCursor
+Apply-ModernRoundedStyle $LogBtn ([System.Drawing.Color]::FromArgb(150, 30, 144, 255)) 
 $Form.Controls.Add($LogBtn)
 
 # Bouton Lancer
@@ -164,10 +295,10 @@ $StartBtn = New-Object System.Windows.Forms.Button
 $StartBtn.Text = "Lancer"
 $StartBtn.Location = New-Object System.Drawing.Point(370, 230)
 $StartBtn.Size = New-Object System.Drawing.Size(115, 30)
-$StartBtn.BackColor = [System.Drawing.Color]::SeaGreen
-$StartBtn.FlatStyle = "Flat"
 $StartBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+$StartBtn.ForeColor = [System.Drawing.Color]::White
 $StartBtn.Cursor = $ModernHandCursor
+Apply-ModernRoundedStyle $StartBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87)) 
 $Form.Controls.Add($StartBtn)
 
 # Bouton Arrêter
@@ -175,40 +306,50 @@ $StopBtn = New-Object System.Windows.Forms.Button
 $StopBtn.Text = "Arr${e_grave}ter"
 $StopBtn.Location = New-Object System.Drawing.Point(495, 230)
 $StopBtn.Size = New-Object System.Drawing.Size(115, 30)
-$StopBtn.BackColor = [System.Drawing.Color]::Firebrick
-$StopBtn.ForeColor = [System.Drawing.Color]::White #
-$StopBtn.FlatStyle = "Flat"
+$StopBtn.ForeColor = [System.Drawing.Color]::White
 $StopBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 $StopBtn.Cursor = $ModernHandCursor
-$StopBtn.Enabled = $false # Désactivé par défaut tant qu'on ne lance rien
+$StopBtn.Enabled = $false
+Apply-ModernRoundedStyle $StopBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34)) 
 $Form.Controls.Add($StopBtn)
-# ZONE DE LOGS
+
+# ZONE DE LOGS CORRIGÉE (FOND SOMBRE COHÉRENT ET ASSORTI)
 $LogTextBox = New-Object System.Windows.Forms.RichTextBox
 $LogTextBox.Size = New-Object System.Drawing.Size(590, 240)
 $LogTextBox.Location = New-Object System.Drawing.Point(20, 275)
-$LogTextBox.BackColor = [System.Drawing.Color]::Black
+$LogTextBox.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 20) # Finis les fonds blancs opaques
+$LogTextBox.ForeColor = [System.Drawing.Color]::White
+$LogTextBox.BorderStyle = [System.Windows.Forms.BorderStyle]::None
 $LogTextBox.Font = New-Object System.Drawing.Font("Consolas", 9.5)
 $LogTextBox.ReadOnly = $true
 $LogTextBox.ScrollBars = [System.Windows.Forms.RichTextBoxScrollBars]::Vertical
 $Form.Controls.Add($LogTextBox)
 
+# Encadrement fin décoratif pour le log style Fluent
+$LogPanel = New-Object System.Windows.Forms.Panel
+$LogPanel.Size = New-Object System.Drawing.Size(594, 244)
+$LogPanel.Location = New-Object System.Drawing.Point(18, 273)
+$LogPanel.BackColor = [System.Drawing.Color]::FromArgb(60, 255, 255, 255)
+$Form.Controls.Add($LogPanel)
+$LogPanel.Controls.Add($LogTextBox)
+$LogTextBox.Location = New-Object System.Drawing.Point(2, 2)
+$LogTextBox.Size = New-Object System.Drawing.Size(590, 240)
+
 # Bouton Discord
 $DiscordBtn = New-Object System.Windows.Forms.Button
 $DiscordBtn.Size = New-Object System.Drawing.Size(220, 36)
 $DiscordBtn.Location = New-Object System.Drawing.Point(205, 528)
-$DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(88, 101, 242)
 $DiscordBtn.ForeColor = [System.Drawing.Color]::White
-$DiscordBtn.FlatStyle = "Flat"
-$DiscordBtn.FlatAppearance.BorderSize = 0
-$DiscordBtn.Text = "    Rejoins-nous sur Discord"
+$DiscordBtn.Text = "      Rejoins-nous sur Discord"
 $DiscordBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 $DiscordBtn.Cursor = $ModernHandCursor
+Apply-ModernRoundedStyle $DiscordBtn ([System.Drawing.Color]::FromArgb(150, 88, 101, 242))
 
 $DiscordBtn.Add_Paint({
     param($sender, $e)
     $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-    $xOff = 12; $yOff = 10
+    $xOff = 15; $yOff = 10
     $points = @(
         (New-Object System.Drawing.PointF($xOff + 3.9, $yOff + 1.2)),(New-Object System.Drawing.PointF($xOff + 5.1, $yOff + 3.1)),
         (New-Object System.Drawing.PointF($xOff + 7.8, $yOff + 2.5)),(New-Object System.Drawing.PointF($xOff + 8.4, $yOff + 1.7)),
@@ -223,12 +364,10 @@ $DiscordBtn.Add_Paint({
         (New-Object System.Drawing.PointF($xOff + 0.0, $yOff + 11.0)),(New-Object System.Drawing.PointF($xOff + 2.0, $yOff + 4.2))
     )
     $g.FillPolygon($brush, $points)
-    $bgBrush = New-Object System.Drawing.SolidBrush($sender.BackColor)
+    $bgBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(40, 20, 20, 20))
     $g.FillEllipse($bgBrush, ($xOff + 5.5), ($yOff + 6.0), 2.5, 2.5)
     $g.FillEllipse($bgBrush, ($xOff + 11.5), ($yOff + 6.0), 2.5, 2.5)
 })
-$DiscordBtn.Add_MouseEnter({ $DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(71, 82, 196) })
-$DiscordBtn.Add_MouseLeave({ $DiscordBtn.BackColor = [System.Drawing.Color]::FromArgb(88, 101, 242) })
 $DiscordBtn.Add_Click({ Start-Process "https://discord.gg/QEKNGfqdpu" })
 $Form.Controls.Add($DiscordBtn)
 
@@ -244,10 +383,10 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkWinget.Text = "Step 2: Manual Selection of App Updates (Winget)"
         $chkNvidia.Text = "Step 3: NVIDIA Graphics Driver (Auto-detect)"
         $chkOffice.Text = "Step 4: Microsoft Office 365 (Update / Install + Activation)"
-        $LogBtn.Text = "View Logs"
-        $StartBtn.Text = "Start"
-        $StopBtn.Text = "Stop"
-        $DiscordBtn.Text = "    Join us on Discord"
+        $LogBtn.BtnText = "View Logs"
+        $StartBtn.BtnText = "Start"
+        $StopBtn.BtnText = "Stop"
+        $DiscordBtn.BtnText = "      Join us on Discord"
     } else {
         $Form.Text = "Assistant de mise $a_grave jour PC"
         $TitleLabel.Text = "ASSISTANT DE MISE $maj_a_grave JOUR PC"
@@ -256,11 +395,12 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkWinget.Text = "${maj_e_aigu}tape 2 : S${e_aigu}lection manuelle des MAJ Applications (Winget)"
         $chkNvidia.Text = "${maj_e_aigu}tape 3 : Pilote Graphique NVIDIA (Automatique si pr${e_aigu}sent)"
         $chkOffice.Text = "${maj_e_aigu}tape 4 : Microsoft Office 365 (MAJ / Installation + Activation)"
-        $LogBtn.Text = "Voir les Logs"
-        $StartBtn.Text = "Lancer"
-        $StopBtn.Text = "Arr${e_grave}ter"
-        $DiscordBtn.Text = "    Rejoins-nous sur Discord"
+        $LogBtn.BtnText = "Voir les Logs"
+        $StartBtn.BtnText = "Lancer"
+        $StopBtn.BtnText = "Arr${e_grave}ter"
+        $DiscordBtn.BtnText = "      Rejoins-nous sur Discord"
     }
+    $Form.Invalidate()
 })
 
 # -------------------------------------------------------------------------
@@ -296,33 +436,42 @@ function Show-WingetSelectionForm ($AppList) {
     $SubForm.Size = New-Object System.Drawing.Size(500, 450)
     $SubForm.StartPosition = "CenterParent"
     $SubForm.FormBorderStyle = "FixedDialog"
-    $SubForm.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
-    $SubForm.ForeColor = [System.Drawing.Color]::White
+    $SubForm.BackColor = [System.Drawing.Color]::Black
+    
+    $SubForm.Add_HandleCreated({ [AcrylicBlur]::EnableBlur($this.Handle) })
 
     $Label = New-Object System.Windows.Forms.Label
     $Label.Text = if ($LangCombo.SelectedItem -eq "EN") { "Check apps to update:" } else { "Cochez les applications ${a_grave} mettre ${a_grave} jour :" }
     $Label.Location = New-Object System.Drawing.Point(15, 15); $Label.Size = New-Object System.Drawing.Size(450, 20); $Label.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $Label.BackColor = [System.Drawing.Color]::Transparent
+    $Label.ForeColor = [System.Drawing.Color]::White
     $SubForm.Controls.Add($Label)
 
     $Panel = New-Object System.Windows.Forms.Panel
     $Panel.Location = New-Object System.Drawing.Point(15, 45); $Panel.Size = New-Object System.Drawing.Size(450, 280); $Panel.AutoScroll = $true; $Panel.BorderStyle = "FixedSingle"
+    $Panel.BackColor = [System.Drawing.Color]::Transparent
     $SubForm.Controls.Add($Panel)
 
     $chkBoxes = @()
     $yPos = 10
     foreach ($app in $AppList) {
         $chk = New-Object System.Windows.Forms.CheckBox; $chk.Text = $app.Name; $chk.Tag = $app.Id; $chk.Location = New-Object System.Drawing.Point(10, $yPos); $chk.Size = New-Object System.Drawing.Size(400, 25); $chk.Checked = $true
+        $chk.BackColor = [System.Drawing.Color]::Transparent; $chk.ForeColor = [System.Drawing.Color]::White
         $Panel.Controls.Add($chk); $chkBoxes += $chk; $yPos += 30
     }
 
     $UpdateBtn = New-Object System.Windows.Forms.Button
-    $UpdateBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
-    $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.BackColor = [System.Drawing.Color]::SeaGreen; $UpdateBtn.FlatStyle = "Flat"; $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
+    $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
+    $UpdateBtn.ForeColor = [System.Drawing.Color]::White
+    Apply-ModernRoundedStyle $UpdateBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
+    $UpdateBtn.BtnText = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
     $SubForm.Controls.Add($UpdateBtn)
 
     $CancelBtn = New-Object System.Windows.Forms.Button
-    $CancelBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
-    $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.BackColor = [System.Drawing.Color]::Firebrick; $CancelBtn.FlatStyle = "Flat"; $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
+    $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
+    $CancelBtn.ForeColor = [System.Drawing.Color]::White
+    Apply-ModernRoundedStyle $CancelBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34))
+    $CancelBtn.BtnText = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
     $SubForm.Controls.Add($CancelBtn)
 
     $SelectedIds = @()
@@ -502,6 +651,7 @@ $Timer.Add_Tick({
         
         # Restauration interface
         $StartBtn.Enabled = $true; $GroupBox.Enabled = $true; $StopBtn.Enabled = $false
+        $Form.Invalidate()
         if ($script:PowerShellInstance) { $script:PowerShellInstance.EndInvoke($script:AsyncResult); $script:PowerShellInstance.Dispose(); $script:Runspace.Close(); $script:Runspace.Dispose() }
     }
 })
@@ -511,6 +661,7 @@ $Timer.Add_Tick({
 # -------------------------------------------------------------------------
 $StartBtn.Add_Click({
     $StartBtn.Enabled = $false; $GroupBox.Enabled = $false; $StopBtn.Enabled = $true; $LogTextBox.Clear(); $ProgressBar.Value = 0
+    $Form.Invalidate()
     $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
     $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave }
     $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
@@ -527,30 +678,26 @@ $StartBtn.Add_Click({
     Append-ColoredLog -TextBox $LogTextBox -Text $msgLaunch
 })
 
-# ÉVÉNEMENT DU BOUTON D'ARRÊT D'URGENCE (ROUGE)
 $StopBtn.Add_Click({
     $Timer.Stop()
-    
-    # Message d'arrêt immédiat dans la console de log
     $msgStop = if ($LangCombo.SelectedItem -eq "EN") { "[STOP] Process forcefully interrupted by user." } else { "[STOP] Processus interrompu de force par l'utilisateur." }
     Append-ColoredLog -TextBox $LogTextBox -Text "`r`n$msgStop"
     
-    # Fermeture brutale et propre du Runspace en arrière-plan
     if ($script:PowerShellInstance) {
         try {
-            $script:PowerShellInstance.Stop() # Arrête immédiatement l'exécution
+            $script:PowerShellInstance.Stop()
             $script:PowerShellInstance.Dispose()
             $script:Runspace.Close()
             $script:Runspace.Dispose()
         } catch {}
     }
     
-    # Restauration de l'état de la GUI
     $StartBtn.Enabled = $true
     $GroupBox.Enabled = $true
     $StopBtn.Enabled = $false
     $ProgressBar.Value = 0
+    $Form.Invalidate()
 })
 
-# Lancement final de la GUI
+# Lancement de l'application
 $Form.ShowDialog() | Out-Null
