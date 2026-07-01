@@ -458,31 +458,41 @@ function Show-WingetSelectionForm ($AppList) {
         $Panel.Controls.Add($chk); $chkBoxes += $chk; $yPos += 30
     }
 
+    # --- BOUTON VALIDER (CORRIGÉ) ---
     $UpdateBtn = New-Object System.Windows.Forms.Button
     $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
     $UpdateBtn.ForeColor = [System.Drawing.Color]::White
+    $UpdateBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
     Apply-ModernRoundedStyle $UpdateBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
-    $UpdateBtn.BtnText = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
     $SubForm.Controls.Add($UpdateBtn)
 
+    # --- BOUTON ANNULER (CORRIGÉ) ---
     $CancelBtn = New-Object System.Windows.Forms.Button
     $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
     $CancelBtn.ForeColor = [System.Drawing.Color]::White
+    $CancelBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
     Apply-ModernRoundedStyle $CancelBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34))
-    $CancelBtn.BtnText = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
     $SubForm.Controls.Add($CancelBtn)
 
-    $SelectedIds = @()
-    $script:actionChosen = "none"
-
-    $UpdateBtn.Add_Click({ foreach ($cb in $chkBoxes) { if ($cb.Checked) { $SelectedIds += $cb.Tag } }; $script:actionChosen = "update"; $SubForm.Close() })
-    $CancelBtn.Add_Click({ $script:actionChosen = "cancel"; $SubForm.Close() })
+    # --- ACTIONS CLICS (CORRIGÉES POUR SÉRIALISATION RUNSPACE) ---
+    $UpdateBtn.Add_Click({ 
+        $SelectedIds = New-Object System.Collections.ArrayList
+        foreach ($cb in $chkBoxes) { if ($cb.Checked) { $null = $SelectedIds.Add($cb.Tag) } }
+        $SharedData.WingetSelectionResult = $SelectedIds
+        $SharedData.PromptResponse = "update"
+        $SubForm.Close() 
+    })
+    
+    $CancelBtn.Add_Click({ 
+        $SharedData.PromptResponse = "cancel"
+        $SubForm.Close() 
+    })
+    
     $SubForm.ShowDialog() | Out-Null
-    return @{ Action = $script:actionChosen; Ids = $SelectedIds }
 }
 
 # -------------------------------------------------------------------------
-# THREAD RUNSPACE (SCRIPT DE TRAITEMENT PRINCIPAL)
+# THREAD RUNSPACE (SCRIPT DE TRAITEMENT PRINCIPAL CORRIGÉ)
 # -------------------------------------------------------------------------
 $SharedData = [hashtable]::Synchronized(@{ Logs = [System.Collections.ArrayList]::new(); Progress = 0; Status = "Ready"; WingetApps = $null; WingetSelectionResult = $null; PromptResponse = "" })
 
@@ -528,7 +538,7 @@ $ScriptBlock = {
             try { $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String; if ($WUOutput) { Log $WUOutput } } catch {}
         }
 
-        # --- WINGET CORRIGÉ (SIMULATION DE TOUCHE Y) ---
+        # --- WINGET CORRIGÉ ---
         if ($Config.Winget) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
@@ -537,10 +547,9 @@ $ScriptBlock = {
                 & winget source update | Out-Null
                 $tempFile = Join-Path $env:TEMP "winget_runspace.txt"
                 
-                # Injection automatique du "Y" dans le pipeline pour passer la question initiale
                 $psi = New-Object System.Diagnostics.ProcessStartInfo
                 $psi.FileName = "powershell.exe"
-                $psi.Arguments = "-NoProfile -Command `"echo Y | winget upgrade`""
+                $psi.Arguments = "-NoProfile -Command `"& winget source reset --force; echo Y | winget upgrade --include-unknown`""
                 $psi.RedirectStandardOutput = $true
                 $psi.UseShellExecute = $false
                 $psi.CreateNoWindow = $true
@@ -567,11 +576,14 @@ $ScriptBlock = {
                 else {
                     $SharedData.WingetApps = $apps; $SharedData.Status = "WingetPrompt"
                     while ($SharedData.Status -eq "WingetPrompt") { Start-Sleep -Milliseconds 200 }
-                    $Result = $SharedData.WingetSelectionResult
-                    if ($Result -and $Result.Action -eq "update" -and $Result.Ids.Count -gt 0) {
-                        foreach ($id in $Result.Ids) { 
+                    
+                    # CORRECTION : Traitement natif des variables partagées plates
+                    $Action = $SharedData.PromptResponse
+                    $SelectedIds = $SharedData.WingetSelectionResult
+                    
+                    if ($Action -eq "update" -and $SelectedIds -and $SelectedIds.Count -gt 0) {
+                        foreach ($id in $SelectedIds) { 
                             Log "   -> MAJ : $id"
-                            # Injection de "Y" également lors de la phase de mise à jour individuelle par précaution
                             $psiApps = New-Object System.Diagnostics.ProcessStartInfo
                             $psiApps.FileName = "powershell.exe"
                             $psiApps.Arguments = "-NoProfile -Command `"echo Y | winget upgrade --id $id --accept-package-agreements --accept-source-agreements`""
@@ -580,6 +592,8 @@ $ScriptBlock = {
                             $procApps = [System.Diagnostics.Process]::Start($psiApps)
                             $procApps.WaitForExit()
                         }
+                    } else {
+                        Log " -> S$($Accents.e_aigu)lection annul$($Accents.e_aigu)ee, aucune application mise $($Accents.a_grave) jour."
                     }
                 }
             }
@@ -649,8 +663,8 @@ $Timer.Add_Tick({
     if ($SharedData.Status -eq "WingetPrompt") {
         $Timer.Stop(); $AppObjects = @()
         foreach ($h in $SharedData.WingetApps) { $AppObjects += [PSCustomObject]$h }
-        $Choice = Show-WingetSelectionForm -AppList $AppObjects
-        $SharedData.WingetSelectionResult = $Choice; $SharedData.Status = "Running"; $Timer.Start()
+        Show-WingetSelectionForm -AppList $AppObjects
+        $SharedData.Status = "Running"; $Timer.Start()
     }
     if ($SharedData.Status -eq "PromptOfficeInstall") {
         $Timer.Stop()
