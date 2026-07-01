@@ -458,7 +458,7 @@ function Show-WingetSelectionForm ($AppList) {
         $Panel.Controls.Add($chk); $chkBoxes += $chk; $yPos += 30
     }
 
-    # --- BOUTON VALIDER (CORRIGÉ) ---
+    # --- BOUTON VALIDER ---
     $UpdateBtn = New-Object System.Windows.Forms.Button
     $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
     $UpdateBtn.ForeColor = [System.Drawing.Color]::White
@@ -466,7 +466,7 @@ function Show-WingetSelectionForm ($AppList) {
     Apply-ModernRoundedStyle $UpdateBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
     $SubForm.Controls.Add($UpdateBtn)
 
-    # --- BOUTON ANNULER (CORRIGÉ) ---
+    # --- BOUTON ANNULER ---
     $CancelBtn = New-Object System.Windows.Forms.Button
     $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
     $CancelBtn.ForeColor = [System.Drawing.Color]::White
@@ -474,7 +474,7 @@ function Show-WingetSelectionForm ($AppList) {
     Apply-ModernRoundedStyle $CancelBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34))
     $SubForm.Controls.Add($CancelBtn)
 
-    # --- ACTIONS CLICS (CORRIGÉES POUR SÉRIALISATION RUNSPACE) ---
+    # --- ACTIONS CLICS ---
     $UpdateBtn.Add_Click({ 
         $SelectedIds = New-Object System.Collections.ArrayList
         foreach ($cb in $chkBoxes) { if ($cb.Checked) { $null = $SelectedIds.Add($cb.Tag) } }
@@ -538,7 +538,7 @@ $ScriptBlock = {
             try { $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String; if ($WUOutput) { Log $WUOutput } } catch {}
         }
 
-        # --- WINGET CORRIGÉ ---
+        # --- WINGET BLINDÉ CONTRE LES VERROUILLAGES DE FICHIERS ---
         if ($Config.Winget) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
@@ -558,10 +558,26 @@ $ScriptBlock = {
                 $output = $proc.StandardOutput.ReadToEnd()
                 $proc.WaitForExit()
                 
+                # RECURSION FIX : Fermeture propre pour libérer le fichier
+                $proc.Close()
+                
                 Set-Content -Path $tempFile -Value $output
 
                 $apps = @()
                 if (Test-Path $tempFile) {
+                    # RECURSION FIX : Boucle de vérification du verrouillage système
+                    $retry = 0
+                    while ($retry -lt 10) {
+                        try {
+                            $fileStream = [System.IO.File]::Open($tempFile, 'Open', 'Read', 'None')
+                            $fileStream.Close()
+                            break
+                        } catch {
+                            Start-Sleep -Milliseconds 200
+                            $retry++
+                        }
+                    }
+
                     $upgradeOutput = Get-Content $tempFile | Select-String -Pattern '-' -NotMatch
                     Remove-Item $tempFile -Force
                     foreach ($line in $upgradeOutput) {
@@ -577,7 +593,6 @@ $ScriptBlock = {
                     $SharedData.WingetApps = $apps; $SharedData.Status = "WingetPrompt"
                     while ($SharedData.Status -eq "WingetPrompt") { Start-Sleep -Milliseconds 200 }
                     
-                    # CORRECTION : Traitement natif des variables partagées plates
                     $Action = $SharedData.PromptResponse
                     $SelectedIds = $SharedData.WingetSelectionResult
                     
@@ -591,6 +606,7 @@ $ScriptBlock = {
                             $psiApps.CreateNoWindow = $true
                             $procApps = [System.Diagnostics.Process]::Start($psiApps)
                             $procApps.WaitForExit()
+                            $procApps.Close()
                         }
                     } else {
                         Log " -> S$($Accents.e_aigu)lection annul$($Accents.e_aigu)ee, aucune application mise $($Accents.a_grave) jour."
