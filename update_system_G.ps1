@@ -646,7 +646,7 @@ $ScriptBlock = {
                     $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
                     if ($ReponseAct -eq "Yes") {
                         $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
-                        Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd", "-o", $tempPathActivation -Wait -NoNewWindow
+                        Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", "https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/Activer_Office.cmd", "-o", $tempPathActivation -Wait -NoNewWindow
                         if (Test-Path $tempPathActivation) { Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait; Remove-Item $tempPathActivation -Force }
                     }
                 }
