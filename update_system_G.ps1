@@ -508,6 +508,34 @@ $ScriptBlock = {
         return $SharedData.PromptResponse
     }
 
+    # Déclaration interne pour exécuter l'activation GitHub proprement sans figer
+    function Run-RemoteActivationScript {
+        Log " -> R$($Accents.e_aigu)cup$($Accents.e_aigu)ration des scripts d'activation depuis GitHub..."
+        $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
+        $urlMasAio      = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/MAS_AIO.cmd"
+        $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
+        $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
+        
+        try {
+            Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlActivation, "-o", $tempPathActivation -Wait -NoNewWindow
+            Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlMasAio, "-o", $tempPathMasAio -Wait -NoNewWindow
+            
+            if (Test-Path $tempPathActivation) {
+                Log " -> Ouverture de l'activation dans une nouvelle fen$($Accents.e_circo)tre..."
+                # On lance l'activation visible pour l'utilisateur
+                Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
+                Log " -> Activation termin$($Accents.e_aigu)e. Retour au script principal."
+            } else {
+                Log " -> [Attention] Fichier d'activation introuvable après téléchargement."
+            }
+        } catch {
+            Log " -> [Attention] Impossible de joindre GitHub pour l'activation."
+        } finally {
+            if (Test-Path $tempPathActivation) { Remove-Item -Path $tempPathActivation -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $tempPathMasAio) { Remove-Item -Path $tempPathMasAio -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
     try {
         $totalSteps = 1
         if ($Config.WU) { $totalSteps++ }
@@ -625,72 +653,98 @@ $ScriptBlock = {
             }
         }
 
-        # --- OFFICE 365 BIEN DÉTECTÉ (REGISTRE) + ACTIVATION PAR DSTATUS ---
+        # --- OFFICE 365 (ADAPTATION ET CORRECTION DU SCRIPT DU RUNSPACE) ---
         if ($Config.Office) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
-            Log "[4] V$($Accents.e_aigu)rification de Microsoft Office..."
+            Log "[4] V$($Accents.e_aigu)rification de Microsoft Office 365..."
             
-            # DÉTECTION ROBUSTE : On vérifie si Word est enregistré dans le système
+            # Détection d'installation basée sur les App Paths (Script 1)
             $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\winword.exe" -ErrorAction SilentlyContinue)
             
-            # On cherche quand même le chemin pour l'activation KMS au cas où
-            $officePath = "C:\Program Files\Microsoft Office\Office16"
-            if (-not (Test-Path $officePath)) { $officePath = "C:\Program Files (x86)\Microsoft Office\Office16" }
-
-            if (-not $isOfficeInstalled) {
-                # --- CAS 1 : OFFICE N'EST PAS INSTALLÉ ---
-                $ReponseInstall = Ask-Confirmation -Title "PromptOfficeInstall"
-                if ($ReponseInstall -eq "Yes") {
-                    $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
-                    $tempPathOffice = "$env:TEMP\Office365_setup.exe"
-                    Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlOffice, "-o", $tempPathOffice -Wait -NoNewWindow
-                    Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow; Start-Sleep -Seconds 15
-                    while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 5 }
-                    Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
-                    
-                    # On recalcule le chemin après la nouvelle installation
-                    if (-not (Test-Path $officePath)) { $officePath = "C:\Program Files (x86)\Microsoft Office\Office16" }
-                    
-                    $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
-                    if ($ReponseAct -eq "Yes" -and (Test-Path "$officePath\ospp.vbs")) {
-                        Log "   -> Activation d'Office en cours..."
-                        $cmds = @(
-                            "cscript //nologo `"$officePath\ospp.vbs`" /inpkey:XQNVK-8JYDB-WJ9W3-YJ8YR-WFG99",
-                            "cscript //nologo `"$officePath\ospp.vbs`" /sethst:kms8.msguides.com",
-                            "cscript //nologo `"$officePath\ospp.vbs`" /act"
-                        )
-                        foreach ($cmd in $cmds) { Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow }
-                        Log "   -> Activation termin$($Accents.e_aigu)e."
-                    }
-                }
-            } else {
-                # --- CAS 2 : OFFICE EST BIEN INSTALLÉ -> ON VÉRIFIE L'ACTIVATION ---
-                Log "   -> Office pr$($Accents.e_aigu)sent sur la machine. V$($Accents.e_aigu)rification de la licence..."
+            $isOfficeActivated = $false
+            if ($isOfficeInstalled) {
+                $vbsPaths = @(
+                    "C:\Program Files\Microsoft Office\Office16\ospp.vbs",
+                    "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs",
+                    "C:\Program Files\Microsoft Office\Office15\ospp.vbs"
+                )
                 
-                if (Test-Path "$officePath\ospp.vbs") {
-                    $statusOutput = cscript //nologo "$officePath\ospp.vbs" /dstatus 2>&1 | Out-String
-                    
-                    if ($statusOutput -notmatch "LICENSE STATUS:\s+--- LICENSED ---" -or $statusOutput -match "LICENSE STATUS:\s+--- OOB_GRACE ---|--- NOTIFICATION ---|--- UNLICENSED ---") {
-                        Log " -> [Attention] Office est install$($Accents.e_aigu) mais n'est PAS activ$($Accents.e_aigu) !"
-                        Log "   -> Lancement automatique de l'activation KMS..."
-                        $cmds = @(
-                            "cscript //nologo `"$officePath\ospp.vbs`" /inpkey:XQNVK-8JYDB-WJ9W3-YJ8YR-WFG99",
-                            "cscript //nologo `"$officePath\ospp.vbs`" /sethst:kms8.msguides.com",
-                            "cscript //nologo `"$officePath\ospp.vbs`" /act"
-                        )
-                        foreach ($cmd in $cmds) { Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow }
-                        Log " -> Succ$($Accents.e_grave)s : Activation forc$($Accents.e_aigu)e termin$($Accents.e_aigu)e."
-                    } else {
-                        Log " -> Succ$($Accents.e_grave)s : Office est d$($Accents.e_aigu)j$($Accents.a_grave) activ$($Accents.e_aigu)."
+                $targetVbs = $null
+                foreach ($path in $vbsPaths) {
+                    if (Test-Path $path) { $targetVbs = $path; break }
+                }
+
+                if (-not $targetVbs) {
+                    $targetVbs = Get-ChildItem -Path "C:\Program Files\Microsoft Office", "C:\Program Files (x86)\Microsoft Office" -Filter "ospp.vbs" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+                }
+
+                if ($targetVbs -and (Test-Path $targetVbs)) {
+                    $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
+                    if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
+                        $isOfficeActivated = $true
                     }
                 } else {
-                    Log "   -> [Info] Impossible de tester la licence (ospp.vbs absent), recherche des mises $($Accents.a_grave) jour..."
+                    $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name "ProductReleaseIds" -ErrorAction SilentlyContinue
+                    if ($regCheck) { $isOfficeActivated = $true }
                 }
+            }
 
-                # Recherche classique des mises à jour d'Office
-                $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
-                if (Test-Path $pathC2R) { Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -NoNewWindow }
+            if (-not $isOfficeInstalled) {
+                Log " -> [!] Microsoft 365 n'est pas install$($Accents.e_aigu) sur ce PC."
+                $ReponseInstall = Ask-Confirmation -Title "PromptOfficeInstall"
+                if ($ReponseInstall -eq "Yes") {
+                    Log " -> T$($Accents.e_aigu)l$($Accents.e_aigu)chargement de l'installateur officiel Office..."
+                    $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
+                    $tempPathOffice = "$env:TEMP\Office365_setup.exe"
+                    
+                    try {
+                        Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlOffice, "-o", $tempPathOffice -Wait -NoNewWindow
+                        Log " -> Lancement de l'installation d'Office 365..."
+                        Log " -> Suivez la progression dans la fen$($Accents.e_circo)tre d'installation Orange."
+                        
+                        Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
+                        Start-Sleep -Seconds 15
+                        
+                        while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) {
+                            Start-Sleep -Seconds 5
+                        }
+                        
+                        Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
+                        Log " -> L'installation de Microsoft Office 365 est termin$($Accents.e_aigu)e !"
+                        
+                        $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
+                        if ($ReponseAct -eq "Yes") { 
+                            Run-RemoteActivationScript 
+                        }
+                    } catch {
+                        Log " [ERREUR] Impossible de traiter Microsoft Office : $_"
+                    }
+                } else {
+                    Log " -> $($Accents.maj_e_aigu)tape Microsoft Office ignor$($Accents.e_aigu)e par l'utilisateur."
+                }
+            } else {
+                Log " -> Microsoft Office 365 est d$($Accents.e_aigu)j$($Accents.a_grave) install$($Accents.e_aigu) sur ce PC."
+                
+                if (-not $isOfficeActivated) {
+                    Log " -> [Attention] Microsoft Office est pr$($Accents.e_aigu)sent mais n'est pas activ$($Accents.e_aigu) !"
+                    $ReponseAct = Ask-Confirmation -Title "PromptOfficeActivate"
+                    if ($ReponseAct -eq "Yes") { 
+                        Run-RemoteActivationScript 
+                    }
+                } else {
+                    Log " -> Licence Microsoft Office valide et activ$($Accents.e_aigu)e."
+                    Log " -> Recherche et application des mises $($Accents.a_grave) jour Office en cours..."
+                    
+                    $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
+                    if (Test-Path $pathC2R) {
+                        Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -Wait -NoNewWindow
+                        Start-Process -FilePath $pathC2R -ArgumentList "/update user displaylevel=false forceappshutdown=true" -Wait -NoNewWindow
+                        Log " -> Mises $($Accents.a_grave) jour Office trait$($Accents.e_aigu)es avec succ$($Accents.e_grave)s."
+                    } else {
+                        Log " -> [Attention] L'ex$($Accents.e_aigu)cutable de mise $($Accents.a_grave) jour Office ClickToRun est introuvable."
+                    }
+                }
             }
         }
 
@@ -732,14 +786,15 @@ $Timer.Add_Tick({
     }
     if ($SharedData.Status -eq "PromptOfficeActivate") {
         $Timer.Stop()
-        $msg = if ($LangCombo.SelectedItem -eq "EN") { "Installation complete.`n`nDo you want to run the activation script now?" } else { "L'installation est terminée.`n`nVoulez-vous lancer le script d'activation d'Office maintenant ?" }
-        $Rep = [System.Windows.Forms.MessageBox]::Show($Form, $msg, "Activation", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+        $msg = if ($LangCombo.SelectedItem -eq "EN") { "Do you want to run the activation script now?" } else { "Voulez-vous lancer le script d'activation d'Office maintenant ?" }
+        $title = if ($LangCombo.SelectedItem -eq "EN") { "Office Activation" } else { "Activation de Microsoft Office" }
+        $Rep = [System.Windows.Forms.MessageBox]::Show($Form, $msg, $title, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
         $SharedData.PromptResponse = $Rep.ToString(); $SharedData.Status = "Running"; $Timer.Start()
     }
     if ($SharedData.Status -eq "Finished") {
         $Timer.Stop()
-        $msg = if ($LangCombo.SelectedItem -eq "EN") { "Process complete." } else { "Le processus est termin${e_aigu}." }
-        $title = if ($LangCombo.SelectedItem -eq "EN") { "Success" } else { "Succ${e_grave}s" }
+        $msg = if ($LangCombo.SelectedItem -eq "EN") { "Process complete." } else { "Le processus est terminé." }
+        $title = if ($LangCombo.SelectedItem -eq "EN") { "Success" } else { "Succès" }
         [System.Windows.Forms.MessageBox]::Show($Form, $msg, $title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
         
         # Restauration interface
@@ -756,7 +811,7 @@ $StartBtn.Add_Click({
     $StartBtn.Enabled = $false; $GroupBox.Enabled = $false; $StopBtn.Enabled = $true; $LogTextBox.Clear(); $ProgressBar.Value = 0
     $Form.Invalidate()
     $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
-    $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave }
+    $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave; e_circo = "$([char]233)" }
     $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
 
     $script:Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
@@ -767,7 +822,7 @@ $StartBtn.Add_Click({
     $script:AsyncResult = $script:PowerShellInstance.BeginInvoke()
     $Timer.Start()
     
-    $msgLaunch = if ($LangCombo.SelectedItem -eq "EN") { "[!] Process started. Preparing environment..." } else { "[!] Processus lanc${e_aigu}. Pr${e_aigu}paration de l'environnement..." }
+    $msgLaunch = if ($LangCombo.SelectedItem -eq "EN") { "[!] Process started. Preparing environment..." } else { "[!] Processus lancé. Préparation de l'environnement..." }
     Append-ColoredLog -TextBox $LogTextBox -Text $msgLaunch
 })
 
