@@ -139,7 +139,12 @@ function Apply-ModernRoundedStyle ($Button, $HoverColor, $Radius = 12) {
     $btnText = $Button.Text
     if ($btnText.Trim() -ne "") { $Button.Text = " " }
     
-    $Button | Add-Member -MemberType NoteProperty -Name "BtnText" -Value $btnText -Force
+    if (-not ($Button | Get-Member -Name "BtnText" -ErrorAction SilentlyContinue)) {
+        $Button | Add-Member -MemberType NoteProperty -Name "BtnText" -Value $btnText -Force
+    } else {
+        $Button.BtnText = $btnText
+    }
+    
     $Button | Add-Member -MemberType NoteProperty -Name "IsHovered" -Value $false -Force
     $Button | Add-Member -MemberType NoteProperty -Name "DefaultColor" -Value [System.Drawing.Color]::FromArgb(40, 25, 25, 25) -Force
     $Button | Add-Member -MemberType NoteProperty -Name "HoverColor" -Value $HoverColor -Force
@@ -273,43 +278,33 @@ $GroupBox.Controls.Add($chkOffice)
 # Barre de progression
 $ProgressBar = New-Object System.Windows.Forms.ProgressBar
 $ProgressBar.Location = New-Object System.Drawing.Point(20, 230)
-$ProgressBar.Size = New-Object System.Drawing.Size(210, 30)
+$ProgressBar.Size = New-Object System.Drawing.Size(305, 30)
 $ProgressBar.Style = "Continuous"
 $Form.Controls.Add($ProgressBar)
 
 # Bouton Voir les Logs
 $LogBtn = New-Object System.Windows.Forms.Button
 $LogBtn.Text = "Voir les Logs"
-$LogBtn.Location = New-Object System.Drawing.Point(245, 230)
-$LogBtn.Size = New-Object System.Drawing.Size(115, 30)
+$LogBtn.Location = New-Object System.Drawing.Point(340, 230)
+$LogBtn.Size = New-Object System.Drawing.Size(130, 30)
 $LogBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $LogBtn.ForeColor = [System.Drawing.Color]::White
 $LogBtn.Cursor = $ModernHandCursor
 Apply-ModernRoundedStyle $LogBtn ([System.Drawing.Color]::FromArgb(150, 30, 144, 255)) 
 $Form.Controls.Add($LogBtn)
 
-# Bouton Lancer
-$StartBtn = New-Object System.Windows.Forms.Button
-$StartBtn.Text = "Lancer"
-$StartBtn.Location = New-Object System.Drawing.Point(370, 230)
-$StartBtn.Size = New-Object System.Drawing.Size(115, 30)
-$StartBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-$StartBtn.ForeColor = [System.Drawing.Color]::White
-$StartBtn.Cursor = $ModernHandCursor
-Apply-ModernRoundedStyle $StartBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87)) 
-$Form.Controls.Add($StartBtn)
-
-# Bouton Arrêter
-$StopBtn = New-Object System.Windows.Forms.Button
-$StopBtn.Text = "Arr${e_grave}ter"
-$StopBtn.Location = New-Object System.Drawing.Point(495, 230)
-$StopBtn.Size = New-Object System.Drawing.Size(115, 30)
-$StopBtn.ForeColor = [System.Drawing.Color]::White
-$StopBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-$StopBtn.Cursor = $ModernHandCursor
-$StopBtn.Enabled = $false
-Apply-ModernRoundedStyle $StopBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34)) 
-$Form.Controls.Add($StopBtn)
+# LE BOUTON UNIQUE D'ACTION
+$script:IsRunning = $false
+$ActionBtn = New-Object System.Windows.Forms.Button
+$ActionBtn.Text = "Lancer"
+$ActionBtn.Location = New-Object System.Drawing.Point(480, 230)
+$ActionBtn.Size = New-Object System.Drawing.Size(130, 30)
+$ActionBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+$ActionBtn.ForeColor = [System.Drawing.Color]::LimeGreen # Écrit en vert de base
+$ActionBtn.Cursor = $ModernHandCursor
+# On applique le style graphique CUSTOM UNE SEULE FOIS ici
+Apply-ModernRoundedStyle $ActionBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
+$Form.Controls.Add($ActionBtn)
 
 # ZONE DE LOGS
 $LogTextBox = New-Object System.Windows.Forms.RichTextBox
@@ -370,8 +365,32 @@ $DiscordBtn.Add_Click({ Start-Process "https://discord.gg/QEKNGfqdpu" })
 $Form.Controls.Add($DiscordBtn)
 
 # -------------------------------------------------------------------------
-# GESTION DES TRADUCTIONS GUI
+# GESTION DES TRADUCTIONS ET COULEURS DYNAMIQUES DU BOUTON
 # -------------------------------------------------------------------------
+function Update-ButtonTranslation {
+    if ($LangCombo.SelectedItem -eq "EN") {
+        if ($script:IsRunning) {
+            $ActionBtn.BtnText = "Stop"
+            $ActionBtn.ForeColor = [System.Drawing.Color]::OrangeRed
+            $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 178, 34, 34)
+        } else {
+            $ActionBtn.BtnText = "Start"
+            $ActionBtn.ForeColor = [System.Drawing.Color]::LimeGreen
+            $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 46, 139, 87)
+        }
+    } else {
+        if ($script:IsRunning) {
+            $ActionBtn.BtnText = "Arr${e_grave}ter"
+            $ActionBtn.ForeColor = [System.Drawing.Color]::OrangeRed
+            $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 178, 34, 34)
+        } else {
+            $ActionBtn.BtnText = "Lancer"
+            $ActionBtn.ForeColor = [System.Drawing.Color]::LimeGreen
+            $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 46, 139, 87)
+        }
+    }
+}
+
 $LangCombo.Add_SelectedIndexChanged({
     if ($LangCombo.SelectedItem -eq "EN") {
         $Form.Text = "PC Update Assistant"
@@ -382,8 +401,6 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkNvidia.Text = "Step 3: NVIDIA Graphics Driver (Auto-detect)"
         $chkOffice.Text = "Step 4: Microsoft Office 365 (Update / Install + Activation)"
         $LogBtn.BtnText = "View Logs"
-        $StartBtn.BtnText = "Start"
-        $StopBtn.BtnText = "Stop"
         $DiscordBtn.BtnText = "      Join us on Discord"
     } else {
         $Form.Text = "Assistant de mise $a_grave jour PC"
@@ -394,10 +411,9 @@ $LangCombo.Add_SelectedIndexChanged({
         $chkNvidia.Text = "${maj_e_aigu}tape 3 : Pilote Graphique NVIDIA (Automatique si pr${e_aigu}sent)"
         $chkOffice.Text = "${maj_e_aigu}tape 4 : Microsoft Office 365 (MAJ / Installation + Activation)"
         $LogBtn.BtnText = "Voir les Logs"
-        $StartBtn.BtnText = "Lancer"
-        $StopBtn.BtnText = "Arr${e_grave}ter"
         $DiscordBtn.BtnText = "      Rejoins-nous sur Discord"
     }
+    Update-ButtonTranslation
     $Form.Invalidate()
 })
 
@@ -508,7 +524,6 @@ $ScriptBlock = {
         return $SharedData.PromptResponse
     }
 
-    # Déclaration interne pour exécuter l'activation GitHub proprement sans figer
     function Run-RemoteActivationScript {
         Log " -> R$($Accents.e_aigu)cup$($Accents.e_aigu)ration des scripts d'activation depuis GitHub..."
         $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
@@ -522,7 +537,6 @@ $ScriptBlock = {
             
             if (Test-Path $tempPathActivation) {
                 Log " -> Ouverture de l'activation dans une nouvelle fen$($Accents.e_circo)tre..."
-                # On lance l'activation visible pour l'utilisateur
                 Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
                 Log " -> Activation termin$($Accents.e_aigu)e. Retour au script principal."
             } else {
@@ -653,13 +667,12 @@ $ScriptBlock = {
             }
         }
 
-        # --- OFFICE 365 (ADAPTATION ET CORRECTION DU SCRIPT DU RUNSPACE) ---
+        # --- OFFICE 365 ---
         if ($Config.Office) {
             $currentStep++
             $SharedData.Progress = [math]::Round(($currentStep / $totalSteps) * 100)
             Log "[4] V$($Accents.e_aigu)rification de Microsoft Office 365..."
             
-            # Détection d'installation basée sur les App Paths (Script 1)
             $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\winword.exe" -ErrorAction SilentlyContinue)
             
             $isOfficeActivated = $false
@@ -762,6 +775,18 @@ $ScriptBlock = {
 # -------------------------------------------------------------------------
 # HORLOGE SURVEILLANCE UI (RAFRAÎCHISSEMENT ET POP-UPS)
 # -------------------------------------------------------------------------
+function Reset-ToStartForm {
+    $script:IsRunning = $false
+    $GroupBox.Enabled = $true
+    
+    # On modifie directement les propriétés existantes de l'objet bouton au lieu d'appeler Apply-ModernRoundedStyle
+    $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 46, 139, 87)
+    
+    Update-ButtonTranslation
+    $ActionBtn.Invalidate()
+    $Form.Invalidate()
+}
+
 $Timer = New-Object System.Windows.Forms.Timer
 $Timer.Interval = 100
 $Timer.Add_Tick({
@@ -797,54 +822,61 @@ $Timer.Add_Tick({
         $title = if ($LangCombo.SelectedItem -eq "EN") { "Success" } else { "Succès" }
         [System.Windows.Forms.MessageBox]::Show($Form, $msg, $title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
         
-        # Restauration interface
-        $StartBtn.Enabled = $true; $GroupBox.Enabled = $true; $StopBtn.Enabled = $false
-        $Form.Invalidate()
+        Reset-ToStartForm
         if ($script:PowerShellInstance) { $script:PowerShellInstance.EndInvoke($script:AsyncResult); $script:PowerShellInstance.Dispose(); $script:Runspace.Close(); $script:Runspace.Dispose() }
     }
 })
 
 # -------------------------------------------------------------------------
-# LOGIQUE DES BOUTONS (LANCER ET ARRÊTER)
+# LOGIQUE DU BOUTON UNIQUE (COMMUTATION LANCER / ARRÊTER)
 # -------------------------------------------------------------------------
-$StartBtn.Add_Click({
-    $StartBtn.Enabled = $false; $GroupBox.Enabled = $false; $StopBtn.Enabled = $true; $LogTextBox.Clear(); $ProgressBar.Value = 0
-    $Form.Invalidate()
-    $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
-    $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave; e_circo = "$([char]233)" }
-    $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
+$ActionBtn.Add_Click({
+    if ($script:IsRunning -eq $false) {
+        # --- MODE : LANCER ---
+        $script:IsRunning = $true
+        $GroupBox.Enabled = $false
+        $LogTextBox.Clear()
+        $ProgressBar.Value = 0
+        
+        # On ajuste directement les propriétés de l'objet pour éviter la perte de texte
+        $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 178, 34, 34)
+        
+        Update-ButtonTranslation
+        $ActionBtn.Invalidate()
+        $Form.Invalidate()
 
-    $script:Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-    $script:Runspace.Open()
-    $script:PowerShellInstance = [System.Management.Automation.PowerShell]::Create()
-    $script:PowerShellInstance.Runspace = $script:Runspace
-    $script:PowerShellInstance.AddScript($ScriptBlock).AddArgument($SharedData).AddArgument($Config).AddArgument($Accents).AddArgument($GlobalLogFile) | Out-Null
-    $script:AsyncResult = $script:PowerShellInstance.BeginInvoke()
-    $Timer.Start()
-    
-    $msgLaunch = if ($LangCombo.SelectedItem -eq "EN") { "[!] Process started. Preparing environment..." } else { "[!] Processus lancé. Préparation de l'environnement..." }
-    Append-ColoredLog -TextBox $LogTextBox -Text $msgLaunch
-})
+        $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
+        $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave; e_circo = "$([char]233)" }
+        $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
 
-$StopBtn.Add_Click({
-    $Timer.Stop()
-    $msgStop = if ($LangCombo.SelectedItem -eq "EN") { "[STOP] Process forcefully interrupted by user." } else { "[STOP] Processus interrompu de force par l'utilisateur." }
-    Append-ColoredLog -TextBox $LogTextBox -Text "`r`n$msgStop"
-    
-    if ($script:PowerShellInstance) {
-        try {
-            $script:PowerShellInstance.Stop()
-            $script:PowerShellInstance.Dispose()
-            $script:Runspace.Close()
-            $script:Runspace.Dispose()
-        } catch {}
+        $script:Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+        $script:Runspace.Open()
+        $script:PowerShellInstance = [System.Management.Automation.PowerShell]::Create()
+        $script:PowerShellInstance.Runspace = $script:Runspace
+        $script:PowerShellInstance.AddScript($ScriptBlock).AddArgument($SharedData).AddArgument($Config).AddArgument($Accents).AddArgument($GlobalLogFile) | Out-Null
+        $script:AsyncResult = $script:PowerShellInstance.BeginInvoke()
+        $Timer.Start()
+        
+        $msgLaunch = if ($LangCombo.SelectedItem -eq "EN") { "[!] Process started. Preparing environment..." } else { "[!] Processus lancé. Préparation de l'environnement..." }
+        Append-ColoredLog -TextBox $LogTextBox -Text $msgLaunch
+    } else {
+        # --- MODE : ARRÊTER ---
+        $Timer.Stop()
+        $msgStop = if ($LangCombo.SelectedItem -eq "EN") { "[STOP] Process forcefully interrupted by user." } else { "[STOP] Processus interrompu de force par l'utilisateur." }
+        Append-ColoredLog -TextBox $LogTextBox -Text "`r`n$msgStop"
+        
+        if ($script:PowerShellInstance) {
+            try {
+                $script:PowerShellInstance.Stop()
+                $script:PowerShellInstance.Dispose()
+                $script:Runspace.Close()
+                $script:Runspace.Dispose()
+            } catch {}
+        }
+        
+        Reset-ToStartForm
+        $ProgressBar.Value = 0
     }
-    
-    $StartBtn.Enabled = $true
-    $GroupBox.Enabled = $true
-    $StopBtn.Enabled = $false
-    $ProgressBar.Value = 0
-    $Form.Invalidate()
 })
 
 # Lancement de l'application
