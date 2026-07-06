@@ -163,8 +163,8 @@ function Apply-ModernRoundedStyle ($Button, $HoverColor, $Radius = 12) {
         
         $path.AddArc($rect.X, $rect.Y, $d, $d, 180, 90)
         $path.AddArc(($rect.Right - $d), $rect.Y, $d, $d, 270, 90)
-        $path.AddArc(($rect.Right - $d), ($rect.Bottom - $d), $d, $d, 0, 90)
-        $path.AddArc($rect.X, ($rect.Bottom - $d), $d, $d, 90, 90)
+        $path.AddArc(($rect.Right - $d), ($sender.Height - 3 - $d), $d, $d, 0, 90)
+        $path.AddArc($rect.X, ($sender.Height - 3 - $d), $d, $d, 90, 90)
         $path.CloseFigure()
 
         $bgAlphaColor = if ($sender.IsHovered) { $sender.HoverColor } else { $sender.DefaultColor }
@@ -179,7 +179,7 @@ function Apply-ModernRoundedStyle ($Button, $HoverColor, $Radius = 12) {
         $g.DrawPath($pen, $path)
         
         $flags = [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter
-        $textColor = if ($sender.Enabled) { $sender.ForeColor } else { [System.Drawing.Color]::FromArgb(100, 255, 255, 255) }
+        $textColor = if ($sender.Enabled) { $sender.ForeColor } else { [System.Drawing.Color]::FromArgb(60, 255, 255, 255) }
         [System.Windows.Forms.TextRenderer]::DrawText($g, $sender.BtnText, $sender.Font, [System.Drawing.Rectangle]::Ceiling($rect), $textColor, $flags)
     })
 }
@@ -239,6 +239,13 @@ $GroupBox.BackColor = [System.Drawing.Color]::Transparent
 $GroupBox.ForeColor = [System.Drawing.Color]::LightGray
 $Form.Controls.Add($GroupBox)
 
+# Fonction de vérification globale pour le bouton Lancer principal
+$CheckMainLaunchState = {
+    $anyChecked = $chkWU.Checked -or $chkWinget.Checked -or $chkNvidia.Checked -or $chkOffice.Checked
+    $ActionBtn.Enabled = $anyChecked
+    $ActionBtn.Invalidate()
+}
+
 $chkWU = New-Object System.Windows.Forms.CheckBox
 $chkWU.Text = "${maj_e_aigu}tape 1 : Windows Update & Pilotes OS"
 $chkWU.Location = New-Object System.Drawing.Point(20, 30)
@@ -246,6 +253,7 @@ $chkWU.Size = New-Object System.Drawing.Size(540, 25)
 $chkWU.BackColor = [System.Drawing.Color]::Transparent
 $chkWU.ForeColor = [System.Drawing.Color]::White
 $chkWU.Checked = $true
+$chkWU.Add_CheckedChanged({ &$CheckMainLaunchState })
 $GroupBox.Controls.Add($chkWU)
 
 $chkWinget = New-Object System.Windows.Forms.CheckBox
@@ -255,6 +263,7 @@ $chkWinget.Size = New-Object System.Drawing.Size(540, 25)
 $chkWinget.BackColor = [System.Drawing.Color]::Transparent
 $chkWinget.ForeColor = [System.Drawing.Color]::White
 $chkWinget.Checked = $true
+$chkWinget.Add_CheckedChanged({ &$CheckMainLaunchState })
 $GroupBox.Controls.Add($chkWinget)
 
 $chkNvidia = New-Object System.Windows.Forms.CheckBox
@@ -264,6 +273,7 @@ $chkNvidia.Size = New-Object System.Drawing.Size(540, 25)
 $chkNvidia.BackColor = [System.Drawing.Color]::Transparent
 $chkNvidia.ForeColor = [System.Drawing.Color]::White
 $chkNvidia.Checked = $true
+$chkNvidia.Add_CheckedChanged({ &$CheckMainLaunchState })
 $GroupBox.Controls.Add($chkNvidia)
 
 $chkOffice = New-Object System.Windows.Forms.CheckBox
@@ -273,6 +283,7 @@ $chkOffice.Size = New-Object System.Drawing.Size(540, 25)
 $chkOffice.BackColor = [System.Drawing.Color]::Transparent
 $chkOffice.ForeColor = [System.Drawing.Color]::White
 $chkOffice.Checked = $true
+$chkOffice.Add_CheckedChanged({ &$CheckMainLaunchState })
 $GroupBox.Controls.Add($chkOffice)
 
 # Barre de progression
@@ -300,9 +311,8 @@ $ActionBtn.Text = "Lancer"
 $ActionBtn.Location = New-Object System.Drawing.Point(480, 230)
 $ActionBtn.Size = New-Object System.Drawing.Size(130, 30)
 $ActionBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-$ActionBtn.ForeColor = [System.Drawing.Color]::LimeGreen # Écrit en vert de base
+$ActionBtn.ForeColor = [System.Drawing.Color]::LimeGreen
 $ActionBtn.Cursor = $ModernHandCursor
-# On applique le style graphique CUSTOM UNE SEULE FOIS ici
 Apply-ModernRoundedStyle $ActionBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
 $Form.Controls.Add($ActionBtn)
 
@@ -426,6 +436,7 @@ function Append-ColoredLog ($TextBox, $Text) {
     elseif ($Text -match '^ -> Succ' -or $Text -match '^ -> .*nettoy' -or $Text -match 'TERMIN' -or $Text -match '===' -or $Text -match 'pass' -or $Text -match 'annul' -or $Text -match 'activ') { $Color = [System.Drawing.Color]::LimeGreen }
     elseif ($Text -match '^ ->' -or $Text -match '^   ->' -or $Text -match '^ \[Pause\]') { $Color = [System.Drawing.Color]::LightGray }
     elseif ($Text -match '\[ERREUR\]' -or $Text -match '\[Attention\]' -or $Text -match '^ \! ' -or $Text -match 'STOP') { $Color = [System.Drawing.Color]::OrangeRed }
+    elseif ($Text -match '^\[Action Requise\]' -or $Text -match '^\[Action Required\]') { $Color = [System.Drawing.Color]::DeepSkyBlue } # Couleur spécifique d'alerte
 
     $TextBox.SelectionStart = $TextBox.TextLength
     $TextBox.SelectionLength = 0
@@ -444,6 +455,9 @@ $LogBtn.Add_Click({
     }
 })
 
+# -------------------------------------------------------------------------
+# FENÊTRE DE SÉLECTION WINGET
+# -------------------------------------------------------------------------
 function Show-WingetSelectionForm ($AppList) {
     $SubForm = New-Object System.Windows.Forms.Form
     $SubForm.Text = if ($LangCombo.SelectedItem -eq "EN") { "Available Application Updates" } else { "Applications disponibles pour mise ${a_grave} jour" }
@@ -466,29 +480,39 @@ function Show-WingetSelectionForm ($AppList) {
     $Panel.BackColor = [System.Drawing.Color]::Transparent
     $SubForm.Controls.Add($Panel)
 
+    # --- BOUTON VALIDER (À DROITE) ---
+    $UpdateBtn = New-Object System.Windows.Forms.Button
+    $UpdateBtn.Location = New-Object System.Drawing.Point(255, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
+    $UpdateBtn.ForeColor = [System.Drawing.Color]::LimeGreen
+    $UpdateBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
+    Apply-ModernRoundedStyle $UpdateBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
+    $SubForm.Controls.Add($UpdateBtn)
+
+    # --- BOUTON ANNULER (À GAUCHE) ---
+    $CancelBtn = New-Object System.Windows.Forms.Button
+    $CancelBtn.Location = New-Object System.Drawing.Point(15, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
+    $CancelBtn.ForeColor = [System.Drawing.Color]::OrangeRed
+    $CancelBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
+    Apply-ModernRoundedStyle $CancelBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34))
+    $SubForm.Controls.Add($CancelBtn)
+
+    $CheckSelectionState = {
+        $anyChecked = $false
+        foreach ($cb in $chkBoxes) { if ($cb.Checked) { $anyChecked = $true; break } }
+        $UpdateBtn.Enabled = $anyChecked
+        $UpdateBtn.Invalidate()
+    }
+
     $chkBoxes = @()
     $yPos = 10
     foreach ($app in $AppList) {
         $chk = New-Object System.Windows.Forms.CheckBox; $chk.Text = $app.Name; $chk.Tag = $app.Id; $chk.Location = New-Object System.Drawing.Point(10, $yPos); $chk.Size = New-Object System.Drawing.Size(400, 25); $chk.Checked = $true
         $chk.BackColor = [System.Drawing.Color]::Transparent; $chk.ForeColor = [System.Drawing.Color]::White
+        $chk.Add_CheckedChanged({ &$CheckSelectionState })
         $Panel.Controls.Add($chk); $chkBoxes += $chk; $yPos += 30
     }
 
-    # --- BOUTON VALIDER ---
-    $UpdateBtn = New-Object System.Windows.Forms.Button
-    $UpdateBtn.Location = New-Object System.Drawing.Point(15, 350); $UpdateBtn.Size = New-Object System.Drawing.Size(210, 35); $UpdateBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $UpdateBtn.Cursor = $ModernHandCursor
-    $UpdateBtn.ForeColor = [System.Drawing.Color]::White
-    $UpdateBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Update Selection" } else { "Mettre ${a_grave} jour la s${e_aigu}lection" }
-    Apply-ModernRoundedStyle $UpdateBtn ([System.Drawing.Color]::FromArgb(150, 46, 139, 87))
-    $SubForm.Controls.Add($UpdateBtn)
-
-    # --- BOUTON ANNULER ---
-    $CancelBtn = New-Object System.Windows.Forms.Button
-    $CancelBtn.Location = New-Object System.Drawing.Point(255, 350); $CancelBtn.Size = New-Object System.Drawing.Size(210, 35); $CancelBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold); $CancelBtn.Cursor = $ModernHandCursor
-    $CancelBtn.ForeColor = [System.Drawing.Color]::White
-    $CancelBtn.Text = if ($LangCombo.SelectedItem -eq "EN") { "Skip updates" } else { "Ne rien mettre ${a_grave} jour" }
-    Apply-ModernRoundedStyle $CancelBtn ([System.Drawing.Color]::FromArgb(150, 178, 34, 34))
-    $SubForm.Controls.Add($CancelBtn)
+    &$CheckSelectionState
 
     # --- ACTIONS CLICS ---
     $UpdateBtn.Add_Click({ 
@@ -629,6 +653,13 @@ $ScriptBlock = {
                 }
                 if ($apps.Count -eq 0) { Log " -> Tout est $($Accents.a_grave) jour !" }
                 else {
+                    # INJECTION LOG : On prévient l'utilisateur de l'ouverture de la fenêtre de sélection
+                    if ($Config.Langue -eq "EN") {
+                        Log "[Action Required] A selection window has opened to choose your application updates."
+                    } else {
+                        Log "[Action Requise] Une fenêtre est ouverte pour choisir vos mises à jour d'applications."
+                    }
+
                     $SharedData.WingetApps = $apps; $SharedData.Status = "WingetPrompt"
                     while ($SharedData.Status -eq "WingetPrompt") { Start-Sleep -Milliseconds 200 }
                     
@@ -778,11 +809,9 @@ $ScriptBlock = {
 function Reset-ToStartForm {
     $script:IsRunning = $false
     $GroupBox.Enabled = $true
-    
-    # On modifie directement les propriétés existantes de l'objet bouton au lieu d'appeler Apply-ModernRoundedStyle
     $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 46, 139, 87)
-    
     Update-ButtonTranslation
+    &$CheckMainLaunchState
     $ActionBtn.Invalidate()
     $Form.Invalidate()
 }
@@ -837,15 +866,13 @@ $ActionBtn.Add_Click({
         $GroupBox.Enabled = $false
         $LogTextBox.Clear()
         $ProgressBar.Value = 0
-        
-        # On ajuste directement les propriétés de l'objet pour éviter la perte de texte
         $ActionBtn.HoverColor = [System.Drawing.Color]::FromArgb(150, 178, 34, 34)
         
         Update-ButtonTranslation
         $ActionBtn.Invalidate()
         $Form.Invalidate()
 
-        $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked }
+        $Config = @{ WU = $chkWU.Checked; Winget = $chkWinget.Checked; Nvidia = $chkNvidia.Checked; Office = $chkOffice.Checked; Langue = $LangCombo.SelectedItem }
         $Accents = @{ e_aigu = $e_aigu; a_grave = $a_grave; e_grave = $e_grave; u_grave = $u_grave; maj_e_aigu = $maj_e_aigu; maj_a_grave = $maj_a_grave; e_circo = "$([char]233)" }
         $SharedData.Progress = 0; $SharedData.Logs.Clear(); $SharedData.Status = "Running"
 
@@ -878,6 +905,9 @@ $ActionBtn.Add_Click({
         $ProgressBar.Value = 0
     }
 })
+
+# Lancement du check initial de sécurité pour le bouton Lancer au tout début
+&$CheckMainLaunchState
 
 # Lancement de l'application
 $Form.ShowDialog() | Out-Null
