@@ -1,447 +1,417 @@
-# Forçage global des protocoles de sécurité réseau
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 12288
+# =========================================================================
+# ASSISTANT DE MISE À JOUR PC (VERSION 100% CLI - ÉTAPES AVEC DESCRIPTIONS)
+# =========================================================================
 
-# Raccourcis universels pour les caractères accentués (Noms distincts pour éviter les conflits)
-$e_aigu    = "$([char]233)" # é
-$a_grave   = "$([char]224)" # à
-$e_grave   = "$([char]232)" # è
-$u_grave   = "$([char]249)" # ù
-$a_circo   = "$([char]226)" # â
-$e_circo   = "$([char]234)" # ê
-$o_circo   = "$([char]244)" # ô
-$c_cedi    = "$([char]231)" # ç
-$maj_e_aigu  = "$([char]201)" # É
+# Changement de la table des caractères de la console Windows en UTF-8 (chcp 65001)
+$null = & chcp.com 65001
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Caractères spéciaux calculés dynamiquement pour contourner l'interprétation du fichier texte
+$e_aigu  = "$([char]233)" # é
+$e_grave = "$([char]232)" # è
+$a_grave = "$([char]224)" # à
+$c_cedille = "$([char]231)" # ç
+$maj_e_aigu = "$([char]201)" # É
 $maj_a_grave = "$([char]192)" # À
 
-# -------------------------------------------------------------------------
-# CONFIGURATION DE LA CONSOLE (FOND NOIR & POLICE CONSOLAS)
-# -------------------------------------------------------------------------
-# Initialisation des variables globales pour la restauration de la police
-$hOutput = $null
-$fontInfo = $null
+# Forçage des protocoles réseau
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocolType::Tls12 -bor 12288
 
-$Host.UI.RawUI.BackgroundColor = "Black"
-$Host.UI.RawUI.ForegroundColor = "White"
+# Chemin du fichier de log persistant
+$GlobalLogFile = Join-Path $env:TEMP "assistant_maj_complet.log"
+"--- Nouveau démarrage de l'assistant (Full Menu CLI) ---" | Set-Content -Path $GlobalLogFile -Encoding UTF8
 
-$Definition = @"
-using System;
-using System.Runtime.InteropServices;
-public class WinConsole {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct CONSOLE_FONT_INFO_EX {
-        public int cbSize; public int nFont; public short dwFontSizeX; public short dwFontSizeY;
-        public int FontFamily; public int FontWeight;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FaceName;
-    }
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern bool SetCurrentConsoleFontEx(IntPtr hConsoleOutput, bool bMaximumWindow, ref CONSOLE_FONT_INFO_EX lpConsoleCurrentFontEx);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern IntPtr GetStdHandle(int nStdHandle);
+function Log ($Msg, $Color = "White") {
+    Write-Host $Msg -ForegroundColor $Color
+    try { $Msg | Add-Content -Path $GlobalLogFile -ErrorAction SilentlyContinue } catch {}
 }
-"@
-Add-Type -TypeDefinition $Definition -ErrorAction SilentlyContinue
 
-try {
-    $hOutput = [WinConsole]::GetStdHandle(-11)
-    if ($hOutput -and $hOutput -ne [IntPtr]::Zero) {
-        $fontInfo = New-Object WinConsole+CONSOLE_FONT_INFO_EX
-        $fontInfo.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($fontInfo)
-        $fontInfo.FaceName = "Consolas"
-        $fontInfo.dwFontSizeY = 16
-        [WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
-    }
-} catch {}
-
-Clear-Host
+function Log-Separation {
+    Write-Host "`n__________________________________________________________`n" -ForegroundColor DarkGray
+}
 
 # -------------------------------------------------------------------------
-# AUTO-ÉLÉVATION HYBRIDE SÉCURISÉE (FORÇAGE FERMETURE CONSOLE PARENTE)
+# AUTO-ÉLÉVATION ADMINISTRATEUR
 # -------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Host "Demande des droits administrateur en cours..." -ForegroundColor Yellow
     if ($PSCommandPath) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     } else {
-        $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
-        if ($ScriptContent) {
-            $TempFile = Join-Path $env:TEMP "update_system_temp.ps1"
-            Set-Content -Path $TempFile -Value $ScriptContent -Encoding UTF8
-            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempFile`"" -Verb RunAs
-        } else {
-            Clear-Host
-            Write-Host "[ERREUR FATALE] Impossible de s'auto-${e_aigu}lever." -ForegroundColor Red
-            Read-Host "Appuyez sur Entr${e_aigu}e pour quitter..."
-            Exit
-        }
+        Log "[ERREUR] Le script doit être exécuté en tant qu'Administrateur." "Red"
     }
-    
-    # Éradication propre et immédiate de la fenêtre actuelle, même si lancée depuis un prompt existant
-    Stop-Process -Id $PID -Force
+    Exit
 }
 
-# Code de nettoyage si exécuté via le bloc de script temporaire
-$TempFileCheck = Join-Path $env:TEMP "update_system_temp.ps1"
-if (Test-Path $TempFileCheck) {
-    # On attend un tout petit peu que l'ancien processus ait fait son "Exit" pour éviter les verrous de fichier, puis on supprime
-    Start-ThreadJob -ScriptBlock {
-        Start-Sleep -Seconds 2
-        Remove-Item -Path $using:TempFileCheck -Force -ErrorAction SilentlyContinue
-    } | Out-Null
-}
-
-$windowSize = New-Object System.Management.Automation.Host.Size(85, 35)
-$bufferSize = New-Object System.Management.Automation.Host.Size(85, 3000)
-$host.UI.RawUI.BufferSize = $bufferSize
-$host.UI.RawUI.WindowSize = $windowSize
+# Cacher le curseur d'écriture pour l'interface des menus
+$saveCursorVisibility = [Console]::CursorVisible
+[Console]::CursorVisible = $false
 
 # -------------------------------------------------------------------------
-# DÉBUT DU SCRIPT PRINCIPAL
+# MENU 1 : SÉLECTION DE LA LANGUE (Bouton Radio)
 # -------------------------------------------------------------------------
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    ASSISTANT DE MISE $maj_a_grave JOUR DE VOTRE PC     " -ForegroundColor Cyan
+Write-Host "         ASSISTANT DE MISE $maj_a_grave JOUR PC (CLI)" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Ce script va forcer l'installation de TOUT ce qui est"
-Write-Host " disponible (Standard, Logiciels, Pilotes, Office)."
-Write-Host " Ne fermez pas cette fen${e_circo}tre tant que ce n'est pas fini."
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host ""
 
-# -------------------------------------------------------------------------
-# ÉTAPE 0 : SÉCURISATION DES PILOTES (ANTI-BLOCAGE GPO)
-# -------------------------------------------------------------------------
-Write-Host "[0/4] Lib${e_aigu}ration des restrictions d'installation de p${e_aigu}riph${e_aigu}riques..." -ForegroundColor Magenta
+$langItems = @(
+    @{ Text = "Fran${c_cedille}ais (FR)" ; Value = "FR" ; Selected = $true },
+    @{ Text = "English (EN)"  ; Value = "EN" ; Selected = $false }
+)
+$langIndex = 0
+$langRunning = $true
 
-$gpoRestrictionsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
-if (-not (Test-Path $gpoRestrictionsPath)) {
-    New-Item -Path $gpoRestrictionsPath -Force | Out-Null
-}
-
-try {
-    Set-ItemProperty -Path $gpoRestrictionsPath -Name "DenyUnspecified" -Value 0 -Type DWord -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path $gpoRestrictionsPath -Name "DenyDeviceIDs" -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path $gpoRestrictionsPath -Name "DenyDeviceClasses" -ErrorAction SilentlyContinue
-    gpupdate /force | Out-Null
-    Write-Host " -> Autorisation d'installation des pilotes appliqu${e_aigu}e avec succ${e_grave}s !" -ForegroundColor Green
-} catch {
-    Write-Host " -> [Information] Impossible de modifier la restriction GPO en arrière-plan." -ForegroundColor DarkGray
-}
-
-Write-Host ""
-Write-Host "----------------------------------------------------------"
-Write-Host ""
-
-# -------------------------------------------------------------------------
-# ÉTAPE 1 : WINDOWS UPDATE
-# -------------------------------------------------------------------------
-Write-Host "[1/4] Recherche et installation des mises $a_grave jour Windows Update..." -ForegroundColor Magenta
-
-Write-Host " -> Activation de l'option 'Recevoir les derni${e_grave}res MAJ d${e_grave}s qu'elles sont disponibles'..." -ForegroundColor DarkGray
-$regPathUX = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-if (-not (Test-Path $regPathUX)) { New-Item -Path $regPathUX -Force | Out-Null }
-Set-ItemProperty -Path $regPathUX -Name "IsContinuousInnovationOptedIn" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-
-Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Set-Service -StartupType Manual -ErrorAction SilentlyContinue
-Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
-
-if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-    Write-Host " -> Chargement du moteur de mise $a_grave jour s${e_aigu}curis${e_aigu}..." -ForegroundColor DarkGray
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
-    Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
-}
-Import-Module PSWindowsUpdate -Force
-
-try {
-    Write-Host " -> Analyse et traitement des mises $a_grave jour standards et pilotes..." -ForegroundColor Cyan
-    Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop | Out-Null
-    Write-Host " -> Mises $a_grave jour standards appliqu${e_aigu}es avec succ${e_grave}s !" -ForegroundColor Green
-} catch {
-    Write-Host " -> [Information] L'installation standard est g${e_aigu}r${e_aigu}e par l'OS en arri${e_grave}re-plan." -ForegroundColor DarkGray
-}
-
-Write-Host " -> D${e_aigu}clenchement de l'Orchestrateur USO pour aspirer les pr${e_aigu}versions..." -ForegroundColor Yellow
-Start-Process -FilePath "usoclient.exe" -ArgumentList "StartInteractiveScan" -NoNewWindow
-Write-Host " -> Le syst${e_grave}me a re$($c_cedi)u l'ordre d'absorber toutes les pr${e_aigu}versions !" -ForegroundColor Green
-
-Write-Host ""
-Write-Host "----------------------------------------------------------"
-Write-Host ""
-
-# -------------------------------------------------------------------------
-# ÉTAPE 2 : ANALYSE ET MISE À JOUR DES LOGICIELS (WINGET)
-# -------------------------------------------------------------------------
-Write-Host "[2/4] Analyse et mise $a_grave jour des logiciels install${e_aigu}s..." -ForegroundColor Magenta
-
-Write-Host " -> Rafra$([char]238)chissement de la base de donn${e_aigu}es des applications..." -ForegroundColor DarkGray
-winget source update | Out-Null
-
-Write-Host " -> Analyse des mises $a_grave jour d'applications disponibles..." -ForegroundColor Cyan
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    $upgradeOutput = winget upgrade | Select-String -Pattern '-' -NotMatch
+while ($langRunning) {
+    [Console]::SetCursorPosition(0, 4)
+    Write-Host " [Navigate: Arrow Keys | Select: Spacebar | Validate: Enter]`n" -ForegroundColor Gray
     
-    $apps = @()
-    foreach ($line in $upgradeOutput) {
-        $stringLine = $line.ToString()
-        if ($stringLine -match '\s+(winget|msstore)\s*$') {
-            $elements = $stringLine -split '\s{2,}' | Where-Object { $_.Trim() -ne '' }
-            if ($elements.Count -ge 3) {
-                $name = $elements[0].Trim()
-                $id   = $elements[1].Trim()
-                if ($id -and $name -notmatch "upgrades available" -and $name -notmatch "mises $a_grave jour") {
-                    $apps += [PSCustomObject]@{ Name = $name; Id = $id; Selected = $false }
+    for ($i = 0; $i -lt $langItems.Count; $i++) {
+        $radioSign = if ($langItems[$i].Selected) { "(*)" } else { "( )" }
+        if ($i -eq $langIndex) {
+            Write-Host "  > $radioSign $($langItems[$i].Text)  " -BackgroundColor Cyan -ForegroundColor Black
+        } else {
+            Write-Host "    $radioSign $($langItems[$i].Text)  " -ForegroundColor White
+        }
+    }
+    
+    $key = [Console]::ReadKey($true)
+    switch ($key.Key) {
+        "UpArrow"   { $langIndex = if ($langIndex -gt 0) { $langIndex - 1 } else { $langItems.Count - 1 } }
+        "DownArrow" { $langIndex = if ($langIndex -lt $langItems.Count - 1) { $langIndex + 1 } else { 0 } }
+        "Spacebar"  { 
+            for ($j = 0; $j -lt $langItems.Count; $j++) { $langItems[$j].Selected = $false }
+            $langItems[$langIndex].Selected = $true
+        }
+        "Enter"     { $langRunning = $false }
+    }
+}
+$lang = ($langItems | Where-Object { $_.Selected }).Value
+
+# -------------------------------------------------------------------------
+# MENU 2 : SÉLECTION DES COMPOSANTS (Noms + Descriptions directes)
+# -------------------------------------------------------------------------
+$menuItems = @(
+    @{ 
+        TextFR = "Windows Update : Recherche, t${e_aigu}l${e_aigu}chargement et installation des mises $a_grave jour OS & pilotes"
+        TextEN = "Windows Update : Scan, download, and install OS updates & drivers"
+        Checked = $true 
+    },
+    @{ 
+        TextFR = "Winget : D${e_aigu}tection des applications, menu de s${e_aigu}lection et d${e_aigu}ploiement des MAJ"
+        TextEN = "Winget : App detection, custom selection menu, and update deployment"
+        Checked = $true 
+    },
+    @{ 
+        TextFR = "NVIDIA : V${e_aigu}rification du GPU, installation / mise $a_grave jour automatique du pilote graphique"
+        TextEN = "NVIDIA : GPU hardware check, automated graphics driver install / update"
+        Checked = $true 
+    },
+    @{ 
+        TextFR = "Office 365 : Diagnostic de licence, mise $a_grave jour forc${e_aigu}e, installation / activation KMS"
+        TextEN = "Office 365 : License diagnosis, forced app update, install / KMS activation"
+        Checked = $true 
+    }
+)
+$compIndex = 0
+$compRunning = $true
+
+[Console]::SetCursorPosition(0, 4)
+Write-Host "                                                                                "
+Write-Host "                                                                                "
+Write-Host "                                                                                "
+
+while ($compRunning) {
+    [Console]::SetCursorPosition(0, 4)
+    $helpText = if ($lang -eq "EN") { " [Navigate: Arrow Keys | Check: Spacebar | Validate: Enter]`n" } else { " [Navigation : Fl${e_grave}ches | Cocher : Espace | Valider : Entr${e_aigu}e]`n" }
+    Write-Host $helpText -ForegroundColor Gray
+    
+    for ($i = 0; $i -lt $menuItems.Count; $i++) {
+        $text = if ($lang -eq "EN") { $menuItems[$i].TextEN } else { $menuItems[$i].TextFR }
+        $checkSign = if ($menuItems[$i].Checked) { "[X]" } else { "[ ]" }
+        
+        if ($i -eq $compIndex) {
+            Write-Host "  > $checkSign $text  " -BackgroundColor Cyan -ForegroundColor Black
+        } else {
+            Write-Host "    $checkSign $text  " -ForegroundColor White
+        }
+    }
+    
+    $key = [Console]::ReadKey($true)
+    switch ($key.Key) {
+        "UpArrow"   { $compIndex = if ($compIndex -gt 0) { $compIndex - 1 } else { $menuItems.Count - 1 } }
+        "DownArrow" { $compIndex = if ($compIndex -lt $menuItems.Count - 1) { $compIndex + 1 } else { 0 } }
+        "Spacebar"  { $menuItems[$compIndex].Checked = -not $menuItems[$compIndex].Checked }
+        "Enter"     { 
+            $anyChecked = $false
+            foreach ($item in $menuItems) { if ($item.Checked) { $anyChecked = $true } }
+            if ($anyChecked) { $compRunning = $false }
+        }
+    }
+}
+
+[Console]::CursorVisible = $saveCursorVisibility
+
+$runWU     = $menuItems[0].Checked
+$runWinget = $menuItems[1].Checked
+$runNvidia = $menuItems[2].Checked
+$runOffice = $menuItems[3].Checked
+
+Write-Host "`n"
+Log "[!] Processus lanc${e_aigu}. Pr${e_aigu}paration de l'environnement..." "Cyan"
+
+# -------------------------------------------------------------------------
+# LIBÉRATION GPO
+# -------------------------------------------------------------------------
+Log-Separation
+Log "[*] GPO : Lib${e_aigu}ration du syst${e_grave}me et suppression temporaire des restrictions..." "Cyan"
+$gpoPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+if (-not (Test-Path $gpoPath)) { New-Item -Path $gpoPath -Force | Out-Null }
+Set-ItemProperty -Path $gpoPath -Name "DenyUnspecified" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+gpupdate /force | Out-Null
+
+# -------------------------------------------------------------------------
+# COMPOSANT : WINDOWS UPDATE
+# -------------------------------------------------------------------------
+if ($runWU) {
+    Log-Separation
+    Log "[*] Windows Update : Recherche, t${e_aigu}l${e_aigu}chargement et installation..." "Cyan"
+    Get-Service -Name wuauserv, bits, cryptsvc -ErrorAction SilentlyContinue | Start-Service -ErrorAction SilentlyContinue
+    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+        Log " -> Installation du module PSWindowsUpdate..." "Gray"
+        Install-Module -Name PSWindowsUpdate -Force -Repository PSGallery -Scope CurrentUser -AllowClobber -ErrorAction SilentlyContinue | Out-Null
+    }
+    Import-Module PSWindowsUpdate -Force
+    try { 
+        $WUOutput = Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue | Out-String
+        if ($WUOutput) { Log $WUOutput "Gray" } 
+    } catch {}
+}
+
+# -------------------------------------------------------------------------
+# COMPOSANT : WINGET
+# -------------------------------------------------------------------------
+if ($runWinget) {
+    Log-Separation
+    Log "[*] Winget : D${e_aigu}tection des applications et menu de s${e_aigu}lection..." "Cyan"
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        & winget source update | Out-Null
+        $tempFile = Join-Path $env:TEMP "winget_cli.txt"
+        
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "powershell.exe"
+        $psi.Arguments = "-NoProfile -Command `"& winget source reset --force; echo Y | winget upgrade --include-unknown`""
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $output = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit()
+        $proc.Close()
+        
+        Set-Content -Path $tempFile -Value $output
+
+        $apps = @()
+        if (Test-Path $tempFile) {
+            $upgradeOutput = Get-Content $tempFile | Select-String -Pattern '-' -NotMatch
+            Remove-Item $tempFile -Force
+            foreach ($line in $upgradeOutput) {
+                $stringLine = $line.ToString()
+                if ($stringLine -match '\s+(winget|msstore)\s*$') {
+                    $elements = $stringLine -split '\s{2,}' | Where-Object { $_.Trim() -ne '' }
+                    if ($elements.Count -ge 3) { $apps += @{ Name = $elements[0].Trim(); Id = $elements[1].Trim(); Checked = $true } }
                 }
             }
         }
-    }
 
-    if ($apps.Count -eq 0) {
-        Write-Host " -> Toutes les applications logicielles sont d${e_aigu}j$a_grave $a_grave jour !" -ForegroundColor Green
-    } else {
-        $choosing = $true
-        Write-Host ""
-        Write-Host "==========================================================" -ForegroundColor Cyan
-        Write-Host "         S${e_aigu}LECTION DES APPLICATIONS $maj_a_grave METTRE $maj_a_grave JOUR        " -ForegroundColor Cyan
-        Write-Host "==========================================================" -ForegroundColor Cyan
-        Write-Host " Entrez le num${e_aigu}ro d'une appli pour la s${e_aigu}lectionner / d${e_aigu}s${e_aigu}lectionner."
-        Write-Host " Tapez 0 pour TOUT s${e_aigu}lectionner ou TOUT d${e_aigu}s${e_aigu}lectionner."
-        Write-Host " Appuyez sur ENTR${e_aigu}E sans rien taper pour valider et lancer."
-        Write-Host "----------------------------------------------------------"
-        
-        $startRow = [Console]::CursorTop
-
-        while ($choosing) {
-            [Console]::SetCursorPosition(0, $startRow)
-            Write-Host ""
-            
-            $anySelected = $null -ne ($apps | Where-Object { $_.Selected -eq $true })
-            if ($anySelected) {
-                Write-Host "  [0] " -NoNewline -ForegroundColor Green
-                Write-Host "TOUT D${e_aigu}S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor Green
+        if ($apps.Count -eq 0) { 
+            Log " -> Tout est $a_grave jour !" "Green"
+        } else {
+            if ($lang -eq "EN") {
+                Log "[Action Required] Select the apps to update from the interactive menu below." "Yellow"
             } else {
-                Write-Host "   0  " -NoNewline -ForegroundColor Gray
-                Write-Host "TOUT S${e_aigu}LECTIONNER".PadRight(45) -ForegroundColor White
+                Log "[Action Requise] S${e_aigu}lectionnez les applications ${a_grave} mettre ${a_grave} jour dans le menu interactif." "Yellow"
             }
+            Write-Host ""
+
+            $wingetIndex = 0
+            $wingetRunning = $true
+            [Console]::CursorVisible = $false
             
-            for ($i = 0; $i -lt $apps.Count; $i++) {
-                $num = $i + 1
-                $cleanLine = "$($apps[$i].Name)".PadRight(45)
-                if ($apps[$i].Selected) {
-                    Write-Host "  [$num] " -NoNewline -ForegroundColor Green
-                    Write-Host $cleanLine -ForegroundColor Green
+            $startTop = [Console]::CursorTop
+
+            while ($wingetRunning) {
+                [Console]::SetCursorPosition(0, $startTop)
+                $wHelp = if ($lang -eq "EN") { " [Navigate: Arrow Keys | Check: Spacebar | Validate: Enter]`n" } else { " [Navigation : Fl${e_grave}ches | Cocher : Espace | Valider : Entr${e_aigu}e]`n" }
+                Write-Host $wHelp -ForegroundColor Gray
+
+                for ($i = 0; $i -lt $apps.Count; $i++) {
+                    $wCheckSign = if ($apps[$i].Checked) { "[X]" } else { "[ ]" }
+                    $lineText = "$wCheckSign $($apps[$i].Name) ($($apps[$i].Id))"
+                    
+                    if ($lineText.Length -gt ([Console]::BufferWidth - 8)) { $lineText = $lineText.Substring(0, [Console]::BufferWidth - 11) + "..." }
+
+                    if ($i -eq $wingetIndex) {
+                        Write-Host "  > $lineText  " -BackgroundColor Cyan -ForegroundColor Black
+                    } else {
+                        Write-Host "    $lineText  " -ForegroundColor White
+                    }
+                }
+                
+                $cancelText = if ($lang -eq "EN") { "[SKIP ALL UPDATES AND CONTINUE]" } else { "[IGNORER TOUTES LES MISES A JOUR ET CONTINUER]" }
+                if ($wingetIndex -eq $apps.Count) {
+                    Write-Host "  > $cancelText  " -BackgroundColor Red -ForegroundColor White
                 } else {
-                    Write-Host "   $num  " -NoNewline -ForegroundColor Gray
-                    Write-Host $cleanLine -ForegroundColor White
+                    Write-Host "    $cancelText  " -ForegroundColor DarkRed
+                }
+
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    "UpArrow"   { $wingetIndex = if ($wingetIndex -gt 0) { $wingetIndex - 1 } else { $apps.Count } }
+                    "DownArrow" { $wingetIndex = if ($wingetIndex -lt $apps.Count) { $wingetIndex + 1 } else { 0 } }
+                    "Spacebar"  { if ($wingetIndex -lt $apps.Count) { $apps[$wingetIndex].Checked = -not $apps[$wingetIndex].Checked } }
+                    "Enter"     { 
+                        if ($wingetIndex -eq $apps.Count) {
+                            foreach ($app in $apps) { $app.Checked = $false }
+                        }
+                        $wingetRunning = $false 
+                    }
                 }
             }
-            
-            Write-Host ""
-            Write-Host (" " * $host.UI.RawUI.WindowSize.Width) -NoNewline
-            [Console]::SetCursorPosition(0, [Console]::CursorTop)
-            
-            $input = Read-Host "Votre choix (ex: 1) "
+            [Console]::CursorVisible = $saveCursorVisibility
+            Write-Host "`n"
 
-            if ([string]::IsNullOrWhiteSpace($input)) {
-                $choosing = $false
-            } elseif ($input -eq "0") {
-                $targetState = -not $anySelected
-                foreach ($app in $apps) { $app.Selected = $targetState }
-            } elseif ($input -as [int] -and ($input -as [int]) -le $apps.Count -and ($input -as [int]) -gt 0) {
-                $index = ($input -as [int]) - 1
-                $apps[$index].Selected = -not $apps[$index].Selected
+            $selectedApps = $apps | Where-Object { $_.Checked -eq $true }
+
+            if ($selectedApps) {
+                foreach ($app in $selectedApps) { 
+                    Log "   -> MAJ : $($app.Id)" "Gray"
+                    $psiApps = New-Object System.Diagnostics.ProcessStartInfo
+                    $psiApps.FileName = "powershell.exe"
+                    $psiApps.Arguments = "-NoProfile -Command `"echo Y | winget upgrade --id $($app.Id) --accept-package-agreements --accept-source-agreements`""
+                    $psiApps.UseShellExecute = $false
+                    $psiApps.CreateNoWindow = $true
+                    $procApps = [System.Diagnostics.Process]::Start($psiApps)
+                    $procApps.WaitForExit()
+                    $procApps.Close()
+                }
+            } else {
+                Log " -> S${e_aigu}lection annul${e_aigu}ee, aucune application mise $a_grave jour." "Green"
             }
         }
-
-        $selectedApps = @()
-        foreach ($app in $apps) {
-            if ($app.Selected -eq $true) { $selectedApps += $app }
-        }
-        
-        if ($selectedApps.Count -gt 0) {
-            Write-Host ""
-            Write-Host " -> Pr${e_aigu}paration de l'installation des applications s${e_aigu}lectionn${e_aigu}es..." -ForegroundColor Cyan
-            foreach ($app in $selectedApps) {
-                Write-Host ""
-                Write-Host " -> [Mise $a_grave jour] $($app.Name) en cours..." -ForegroundColor Yellow
-                winget upgrade --id $app.Id --accept-package-agreements --accept-source-agreements --include-unknown
-            }
-            Write-Host ""
-            Write-Host " -> Les applications s${e_aigu}lectionn${e_aigu}es ont ${e_aigu}t${e_aigu} trait${e_aigu}es !" -ForegroundColor Green
-        } else {
-            Write-Host ""
-            Write-Host " -> Aucune application s${e_aigu}lectionn${e_aigu}e. ${maj_e_aigu}tape ignor${e_aigu}e." -ForegroundColor DarkGray
-        }
     }
-} else {
-    Write-Host " -> [Attention] L'outil 'winget' est introuvable. ${maj_e_aigu}tape saut${e_aigu}e." -ForegroundColor Yellow
 }
 
-# ANTI-BUG BLEU WINGET : Restauration forcée des paramètres de couleur et de police
-$Host.UI.RawUI.BackgroundColor = "Black"
-$Host.UI.RawUI.ForegroundColor = "White"
-try {
-    if ($hOutput -and $fontInfo) {
-        [WinConsole]::SetCurrentConsoleFontEx($hOutput, $false, [ref]$fontInfo) | Out-Null
-    }
-} catch {}
-
-Write-Host ""
-Write-Host "----------------------------------------------------------"
-Write-Host ""
-
 # -------------------------------------------------------------------------
-# ÉTAPE 3 : PILOTE GRAPHIQUE NVIDIA
+# COMPOSANT : NVIDIA
 # -------------------------------------------------------------------------
-Write-Host "[3/4] V${e_aigu}rification et mise $a_grave jour automatique du pilote NVIDIA..." -ForegroundColor Magenta
-
-$hasNvidiaGPU = (Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" })
-
-if ($hasNvidiaGPU) {
-    Write-Host " -> Carte graphique d${e_aigu}tect${e_aigu}e : $($hasNvidiaGPU.Name)" -ForegroundColor Green
-    
-    try {
-        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Host " -> Configuration de Chocolatey..." -ForegroundColor Cyan
-            $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"
-            Invoke-Expression $chocoScript 6>$null 2>$null 4>$null | Out-Null
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        }
-
-        Write-Host " -> Analyse et mise $a_grave jour du pilote Game Ready officiel..." -ForegroundColor Cyan
-        choco upgrade nvidia-display-driver -y --no-progress -r 2>$null | Out-Null
-        Write-Host " -> Le pilote NVIDIA est parfaitement $a_grave jour !" -ForegroundColor Green
-    } catch {
-        Write-Host " [Attention] Impossible de mettre $a_grave jour le pilote via Chocolatey : $_" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host " -> Aucune carte graphique NVIDIA d${e_aigu}tect${e_aigu}e." -ForegroundColor DarkGray
-}
-
-Write-Host ""
-Write-Host "----------------------------------------------------------"
-Write-Host ""
-
-# -------------------------------------------------------------------------
-# ÉTAPE 4 : SUITE MICROSOFT OFFICE 365
-# -------------------------------------------------------------------------
-Write-Host "[4/4] V${e_aigu}rification de Microsoft Office 365..." -ForegroundColor Magenta
-
-$isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\winword.exe" -ErrorAction SilentlyContinue)
-
-$isOfficeActivated = $false
-if ($isOfficeInstalled) {
-    $vbsPaths = @(
-        "C:\Program Files\Microsoft Office\Office16\ospp.vbs",
-        "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs",
-        "C:\Program Files\Microsoft Office\Office15\ospp.vbs"
-    )
-    
-    $targetVbs = $null
-    foreach ($path in $vbsPaths) {
-        if (Test-Path $path) { $targetVbs = $path; break }
-    }
-
-    if (-not $targetVbs) {
-        $targetVbs = Get-ChildItem -Path "C:\Program Files\Microsoft Office", "C:\Program Files (x86)\Microsoft Office" -Filter "ospp.vbs" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    }
-
-    if ($targetVbs -and (Test-Path $targetVbs)) {
-        $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
-        if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
-            $isOfficeActivated = $true
-        }
+if ($runNvidia) {
+    Log-Separation
+    Log "[*] NVIDIA : Analyse matériel, installation / MAJ automatique du pilote..." "Cyan"
+    if (Get-CimInstance Win32_VideoController | Where-Object { $_.DriverProvider -like "*NVIDIA*" -or $_.Name -match "NVIDIA" }) {
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { $chocoScript = "iwr https://community.chocolatey.org/install.ps1 -UseBasicParsing | iex"; Invoke-Expression $chocoScript 6>$null 2>$null | Out-Null }
+        $chocoLog = Join-Path $env:TEMP "choco_temp.log"
+        Start-Process choco -ArgumentList "upgrade nvidia-display-driver -y --no-progress -r" -RedirectStandardOutput $chocoLog -NoNewWindow -Wait
+        if (Test-Path $chocoLog) { Get-Content $chocoLog | ForEach-Object { Log "   [Choco] $_" "Gray" }; Remove-Item $chocoLog -Force }
     } else {
-        $regCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name "ProductReleaseIds" -ErrorAction SilentlyContinue
-        if ($regCheck) { $isOfficeActivated = $true }
+        Log " -> Aucun matériel NVIDIA détecté." "Gray"
     }
 }
 
-function Run-LocalActivationScript {
-    Write-Host " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis GitHub..." -ForegroundColor Cyan
-    $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
-    $urlMasAio      = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/MAS_AIO.cmd"
-    $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
-    $tempPathMasAio      = "$env:TEMP\MAS_AIO.cmd"
+# -------------------------------------------------------------------------
+# COMPOSANT : MICROSOFT OFFICE 365
+# -------------------------------------------------------------------------
+if ($runOffice) {
+    Log-Separation
+    Log "[*] Office 365 : Diagnostic licence, mise $a_grave jour, installation / activation..." "Cyan"
     
-    try {
-        Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlActivation, "-o", $tempPathActivation -Wait -NoNewWindow
-        Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlMasAio, "-o", $tempPathMasAio -Wait -NoNewWindow
-        
-        if (Test-Path $tempPathActivation) {
-            Write-Host " -> Ouverture de l'activation dans une nouvelle fen${e_circo}tre..." -ForegroundColor Cyan
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait
-            Write-Host " -> Activation termin${e_aigu}e. Retour au script principal." -ForegroundColor Green
-        } else {
-            Write-Host " -> [Attention] Fichier d'activation introuvable après téléchargement." -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host " -> [Attention] Impossible de joindre GitHub pour l'activation." -ForegroundColor Yellow
-    } finally {
-        if (Test-Path $tempPathActivation) { Remove-Item -Path $tempPathActivation -Force }
-        if (Test-Path $tempPathMasAio) { Remove-Item -Path $tempPathMasAio -Force }
-    }
-}
+    $isOfficeInstalled = $null -ne (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\winword.exe" -ErrorAction SilentlyContinue)
+    $isOfficeActivated = $false
 
-if (-not $isOfficeInstalled) {
-    Write-Host " -> [!] Microsoft 365 n'est pas install${e_aigu} sur ce PC." -ForegroundColor Yellow
-    $confirmationOffice = Read-Host "Voulez-vous installer la suite Microsoft Office 365 Pro ? (Y/N)"
-    if ($confirmationOffice -match "^[yYoO]$") {
-        Write-Host " -> T${e_aigu}l${e_aigu}chargement de l'installateur officiel Office..." -ForegroundColor Cyan
-        $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
-        $tempPathOffice = "$env:TEMP\Office365_setup.exe"
+    if ($isOfficeInstalled) {
+        $vbsPaths = @(
+            "C:\Program Files\Microsoft Office\Office16\ospp.vbs",
+            "C:\Program Files (x86)\Microsoft Office\Office16\ospp.vbs",
+            "C:\Program Files\Microsoft Office\Office15\ospp.vbs"
+        )
+        $targetVbs = $null
+        foreach ($path in $vbsPaths) { if (Test-Path $path) { $targetVbs = $path; break } }
+        if (-not $targetVbs) {
+            $targetVbs = Get-ChildItem -Path "C:\Program Files\Microsoft Office", "C:\Program Files (x86)\Microsoft Office" -Filter "ospp.vbs" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        }
+
+        if ($targetVbs -and (Test-Path $targetVbs)) {
+            $licenceStatus = cscript.exe //NoLogo "$targetVbs" /dstatus 2>$null | Out-String
+            if ($licenceStatus -match "LICENSED" -or $licenceStatus -match "O365HomePrem" -or $licenceStatus -match "O365ProPlus" -or $licenceStatus -match "Subscription") {
+                $isOfficeActivated = $true
+            }
+        } else {
+            if (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -Name "ProductReleaseIds" -ErrorAction SilentlyContinue) { $isOfficeActivated = $true }
+        }
+    }
+
+    function Run-ConsoleActivationScript {
+        Log " -> R${e_aigu}cup${e_aigu}ration des scripts d'activation depuis GitHub..." "Gray"
+        $urlActivation = "https://raw.githubusercontent.com/Albambinou/automaj-pc/main/Activer_Office.cmd"
+        $tempPathActivation = "$env:TEMP\Activer_Office.cmd"
         try {
-            Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlOffice, "-o", $tempPathOffice -Wait -NoNewWindow
-            Write-Host " -> Lancement de l'installation d'Office 365..." -ForegroundColor Cyan
-            Write-Host " -> Suivez la progression dans la fen${e_circo}tre d'installation Orange." -ForegroundColor Cyan
-            
-            Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
-            Start-Sleep -Seconds 15
-            
-            while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) {
-                Write-Host "." -NoNewline -ForegroundColor Yellow
-                Start-Sleep -Seconds 10
+            Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlActivation, "-o", $tempPathActivation -Wait -NoNewWindow
+            if (Test-Path $tempPathActivation) {
+                Log " -> Exécution du script d'activation en arrière-plan..." "Gray"
+                Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$tempPathActivation`"" -Wait -NoNewWindow
+                Log " -> Processus d'activation terminé." "Green"
             }
-            Write-Host ""
-            
-            Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
-            Write-Host " -> L'installation de Microsoft Office 365 est termin${e_aigu}e !" -ForegroundColor Green
-            
-            $confirmationAct = Read-Host "Voulez-vous lancer l'activation d'Office maintenant ? (Y/N)"
-            if ($confirmationAct -match "^[yYoO]$") { Run-LocalActivationScript }
-        } catch {
-            Write-Host " [ERREUR] Impossible de traiter Microsoft Office : $_" -ForegroundColor Red
+        } catch { Log " -> [Attention] Impossible de joindre GitHub." "Red" }
+        finally { if (Test-Path $tempPathActivation) { Remove-Item -Path $tempPathActivation -Force -ErrorAction SilentlyContinue } }
+    }
+
+    if (-not $isOfficeInstalled) {
+        Log " -> [!] Microsoft 365 n'est pas install${e_aigu} sur ce PC." "Red"
+        $promptInstallOffice = if ($lang -eq "EN") { "Do you want to install Microsoft Office 365 Pro Suite? (Y/N)" } else { "Voulez-vous installer la suite Microsoft Office 365 Pro ? (Y/N)" }
+        if ((Read-Host $promptInstallOffice) -match "^[yYoO]$") {
+            Log " -> T${e_aigu}l${e_aigu}chargement de l'installateur..." "Gray"
+            $urlOffice = "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365AppsBasicRetail&platform=x64&language=fr-fr&version=O16GA"
+            $tempPathOffice = "$env:TEMP\Office365_setup.exe"
+            try {
+                Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-s", $urlOffice, "-o", $tempPathOffice -Wait -NoNewWindow
+                Log " -> Lancement de l'installation d'Office 365 (Patientez)..." "Gray"
+                Start-Process -FilePath $tempPathOffice -ArgumentList "SETLANG=fr-fr" -NoNewWindow
+                Start-Sleep -Seconds 15
+                while (Get-Process -Name "OfficeC2RClient" -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 5 }
+                Remove-Item -Path $tempPathOffice -Force -ErrorAction SilentlyContinue
+                Log " -> Installation d'Office 365 terminée." "Green"
+                
+                $promptAct = if ($lang -eq "EN") { "Do you want to activate Office now? (Y/N)" } else { "Voulez-vous lancer l'activation d'Office maintenant ? (Y/N)" }
+                if ((Read-Host $promptAct) -match "^[yYoO]$") { Run-ConsoleActivationScript }
+            } catch { Log " [ERREUR] Traitement Office impossible : $_" "Red" }
         }
     } else {
-        Write-Host " -> ${maj_e_aigu}tape Microsoft Office ignor${e_aigu}e par l'utilisateur." -ForegroundColor DarkGray
-    }
-} else {
-    Write-Host " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." -ForegroundColor Green
-    
-    if (-not $isOfficeActivated) {
-        Write-Host " -> [Attention] Microsoft Office est pr${e_aigu}sent mais n'est pas activ${e_aigu} !" -ForegroundColor Red
-        $confirmationAct = Read-Host "Voulez-vous lancer le script d'activation d'Office ? (Y/N)"
-        if ($confirmationAct -match "^[yYoO]$") { Run-LocalActivationScript }
-    } else {
-        Write-Host " -> Licence Microsoft Office valide et activ${e_aigu}e." -ForegroundColor Green
-        Write-Host " -> Recherche et application des mises $a_grave jour Office en cours..." -ForegroundColor Cyan
-        
-        $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
-        if (Test-Path $pathC2R) {
-            Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -Wait -NoNewWindow
-            Start-Process -FilePath $pathC2R -ArgumentList "/update user displaylevel=false forceappshutdown=true" -Wait -NoNewWindow
-            Write-Host " -> Mises $a_grave jour Office trait${e_aigu}es avec succ${e_grave}s." -ForegroundColor Green
+        Log " -> Microsoft Office 365 est d${e_aigu}j$a_grave install${e_aigu} sur ce PC." "Green"
+        if (-not $isOfficeActivated) {
+            Log " -> [Attention] Microsoft Office est présent mais non activé !" "Red"
+            $promptAct = if ($lang -eq "EN") { "Do you want to run the activation script? (Y/N)" } else { "Voulez-vous lancer le script d'activation d'Office ? (Y/N)" }
+            if ((Read-Host $promptAct) -match "^[yYoO]$") { Run-ConsoleActivationScript }
         } else {
-            Write-Host " -> [Attention] L'ex${e_aigu}cutable de mise $a_grave jour Office ClickToRun est introuvable." -ForegroundColor Yellow
+            Log " -> Licence Microsoft Office valide et activ${e_aigu}e." "Green"
+            Log " -> Application des mises $a_grave jour Office..." "Gray"
+            $pathC2R = "C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe"
+            if (Test-Path $pathC2R) {
+                Start-Process -FilePath $pathC2R -ArgumentList "/update userenforce=true" -Wait -NoNewWindow
+                Start-Process -FilePath $pathC2R -ArgumentList "/update user displaylevel=false forceappshutdown=true" -Wait -NoNewWindow
+                Log " -> Mises $a_grave jour Office trait${e_aigu}es." "Green"
+            }
         }
     }
 }
 
 # -------------------------------------------------------------------------
-# FIN DU SCRIPT
+# CLÔTURE & PERSISTANCE DE LA FENÊTRE
 # -------------------------------------------------------------------------
-Write-Host ""
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "    TOUTES LES MISES $maj_a_grave JOUR SONT TERMIN${maj_e_aigu}ES !   " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host ""
-Read-Host "Vous pouvez fermer cette fen${e_circo}tre en appuyant sur Entr${e_aigu}e..."
+Log-Separation
+Log "   TOUTES LES MISES $maj_a_grave JOUR SONT TERMIN${maj_e_aigu}ES !" "Green"
+Log "==========================================================" "Green"
+
+$promptExit = if ($lang -eq "EN") { "Press ENTER to close the window..." } else { "Appuyez sur ENTR${e_aigu}E pour fermer la fen${e_grave}tre..." }
+Read-Host "`n$promptExit"
