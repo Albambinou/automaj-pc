@@ -1,12 +1,10 @@
 @echo off
 cls
 echo ============================================================
-echo   PREPARATION DE L'ACTIVATION VIA GITHUB
+echo    PREPARATION DE L'ACTIVATION AUTO D'OFFICE
 echo ============================================================
 echo.
 
-:: 1. Définition du lien RAW vers ton fichier MAS_AIO.cmd sur GitHub
-:: (Pense à remplacer VOTRE_PSEUDO et VOTRE_DEPOT par tes vraies infos)
 set "URL_MAS=https://raw.githubusercontent.com/Albambinou/automaj-pc/refs/heads/main/MAS_AIO.cmd"
 set "TEMP_MAS=%TEMP%\MAS_AIO.cmd"
 
@@ -19,12 +17,12 @@ if not exist "%TEMP_MAS%" (
     exit
 )
 
-echo  -^> Lancement de l'activation...
+echo  -^> Lancement de l'activation automatique d'Office (Ohook)...
 echo.
 
-:: 2. On lance le fichier MAS_AIO.cmd qui a été téléchargé dans les fichiers temporaires
-call "%TEMP_MAS%"
+:: MODIFICATION ICI : On ajoute le commutateur /ohk pour forcer l'option [2] en mode silencieux
+call "%TEMP_MAS%" /ohk
 
-:: 3. Nettoyage du fichier temporaire après la fermeture
+:: Nettoyage du fichier temporaire
 if exist "%TEMP_MAS%" del /f /q "%TEMP_MAS%"
 exit
